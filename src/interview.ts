@@ -1,0 +1,141 @@
+/**
+ * Tax-data interview: structured, conditional questions grounded in the Income
+ * Tax Act (Cap. 123). Pre-answers are deterministic (ETB balances, prior-return
+ * values) — never AI-invented. The preparer confirms/edits every answer; only
+ * confirmed answers produce figures.
+ */
+import type { EtbAccount, InterviewFill } from './domain';
+import { ANCHORS } from './template-map';
+
+export interface Question {
+  id: string;
+  text: string;
+  /** Statutory grounding shown to the preparer. */
+  legalBasis: string;
+  kind: 'amount' | 'yesno';
+  /** Deterministic pre-answer (ETB-derived) or null = preparer must supply. */
+  preAnswer: number | null;
+  /** Which ETB accounts triggered this question (provenance). */
+  triggeredBy: string[];
+}
+
+export interface Interview {
+  questions: Question[];
+}
+
+interface Trigger {
+  id: string;
+  nameRe: RegExp;
+  text: string;
+  legalBasis: string;
+  /** Pre-answer = sum of matching accounts' |cyBalance| (expenses are Dr +). */
+  sumMatches: boolean;
+}
+
+const TRIGGERS: Trigger[] = [
+  {
+    id: 'depreciationAddBack',
+    nameRe: /deprecia|amortis|amortiz/i,
+    text: 'Depreciation/amortisation charged in the accounts is not deductible; it is added back and capital allowances are claimed instead. Confirm the add-back amount.',
+    legalBasis: 'Cap. 123 Art. 14(1)(f) & Deduction (Wear and Tear) Rules — book depreciation replaced by statutory capital allowances.',
+    sumMatches: true,
+  },
+  {
+    id: 'finesPenaltiesAddBack',
+    nameRe: /fine|penalt/i,
+    text: 'Fines and penalties are not wholly and exclusively incurred in the production of income. Confirm the add-back amount.',
+    legalBasis: 'Cap. 123 Art. 14(1) — deduction limited to outgoings wholly and exclusively incurred in the production of the income.',
+    sumMatches: true,
+  },
+  {
+    id: 'donationsAddBack',
+    nameRe: /donation|sponsor/i,
+    text: 'Donations/sponsorships are generally not deductible unless under an approved scheme. Confirm the non-deductible amount.',
+    legalBasis: 'Cap. 123 Art. 14(1) wholly-and-exclusively test; approved-scheme exceptions per subsidiary legislation.',
+    sumMatches: true,
+  },
+  {
+    id: 'entertainmentAddBack',
+    nameRe: /entertain|hospitality/i,
+    text: 'Business entertainment is typically non-deductible in part or whole. Confirm the add-back amount.',
+    legalBasis: 'Cap. 123 Art. 14(1) wholly-and-exclusively test as applied to entertainment expenditure.',
+    sumMatches: true,
+  },
+  {
+    id: 'unrealizedFxAddBack',
+    nameRe: /unrealis|unrealiz|exchange (?:gain|loss|difference)/i,
+    text: 'Unrealised exchange differences are not taxable/deductible until realised. Confirm the adjustment amount.',
+    legalBasis: 'Cap. 123 Arts. 4 & 14 — income/deductions arise when realised (derived), not on retranslation.',
+    sumMatches: true,
+  },
+  {
+    id: 'dividendsExemptPE',
+    nameRe: /dividend/i,
+    text: 'Dividend income may qualify for the participation exemption. Confirm the exempt amount (0 if not applicable).',
+    legalBasis: 'Cap. 123 Art. 12(1)(u) — participation exemption for qualifying holdings.',
+    sumMatches: true,
+  },
+];
+
+export interface InterviewContext {
+  hasPriorReturn: boolean;
+  /** Deterministic pre-answer for losses b/f if extracted from an anchored prior return. */
+  priorLossesBroughtForward?: number | null;
+}
+
+export function buildInterview(etb: EtbAccount[], ctx: InterviewContext): Interview {
+  const questions: Question[] = [];
+  for (const t of TRIGGERS) {
+    const hits = etb.filter((a) => t.nameRe.test(a.accountName));
+    if (hits.length === 0) continue;
+    const sum = hits.reduce((acc, a) => acc + Math.abs(a.cyBalance), 0);
+    questions.push({
+      id: t.id,
+      text: t.text,
+      legalBasis: t.legalBasis,
+      kind: 'amount',
+      preAnswer: t.sumMatches ? Math.round(sum * 100) / 100 : null,
+      triggeredBy: hits.map((a) => a.accountCode),
+    });
+  }
+  // Always asked — continuity items.
+  questions.push({
+    id: 'lossesBroughtForward',
+    text: 'Unabsorbed tax losses brought forward from prior years (0 if none).',
+    legalBasis: 'Cap. 123 Art. 14(1)(g) — carry-forward of losses incurred in a trade etc.',
+    kind: 'amount',
+    preAnswer: ctx.priorLossesBroughtForward ?? null,
+    triggeredBy: [],
+  });
+  questions.push({
+    id: 'capitalAllowancesTotal',
+    text: 'Total capital allowances claimed for the year (per the capital allowances computation / TRA5).',
+    legalBasis: 'Cap. 123 Art. 14(1)(f)(j) & Wear and Tear Rules — statutory allowances on plant, machinery and industrial buildings.',
+    kind: 'amount',
+    preAnswer: null,
+    triggeredBy: [],
+  });
+  return { questions };
+}
+
+const LABELS: Record<string, string> = {
+  depreciationAddBack: 'Add back: depreciation/amortisation',
+  finesPenaltiesAddBack: 'Add back: fines and penalties',
+  donationsAddBack: 'Add back: donations/sponsorships',
+  entertainmentAddBack: 'Add back: entertainment',
+  unrealizedFxAddBack: 'Adjust: unrealised exchange differences',
+  dividendsExemptPE: 'Exempt: participation exemption dividends',
+  lossesBroughtForward: 'Deduct: losses brought forward',
+  capitalAllowancesTotal: 'Deduct: capital allowances',
+};
+
+/** Confirmed answers -> deterministic fills. Zero answers produce nothing. */
+export function fillsFromAnswers(answers: Record<string, number>): InterviewFill[] {
+  const fills: InterviewFill[] = [];
+  for (const [id, amount] of Object.entries(answers)) {
+    if (!amount) continue;
+    const anchor = ANCHORS[id] ?? null;
+    fills.push({ anchorId: anchor ? id : null, amount, label: LABELS[id] ?? id });
+  }
+  return fills;
+}
