@@ -9,12 +9,14 @@ describe('parseEtb', () => {
       ['Code', 'Account Name', 'Debit', 'Credit'],
       ['1200', 'Bank current account', 5000, null],
       ['4000', 'Sales', null, 80000],
-      [null, 'Totals', 5000, 80000],
+      ['5000', 'Cost of sales', 75000, null],
+      [null, 'Totals', 80000, 80000],
     ]);
     const res = parseEtb(buf);
     expect(res.accounts).toEqual([
       { accountCode: '1200', accountName: 'Bank current account', cyBalance: 5000, pyBalance: null },
       { accountCode: '4000', accountName: 'Sales', cyBalance: -80000, pyBalance: null },
+      { accountCode: '5000', accountName: 'Cost of sales', cyBalance: 75000, pyBalance: null },
     ]);
     expect(res.warnings).toEqual([]);
   });
