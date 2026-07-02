@@ -31,7 +31,7 @@ export function renderComputationSummary(input: SummaryInput): string {
   const map = input.mappingRows
     .map(
       (m) =>
-        `<tr><td>${esc(m.ledger)}</td><td>${m.sheet}</td><td>${m.cfrCode}</td><td class="num">${eur(m.amount)}</td></tr>`
+        `<tr><td>${esc(m.ledger)}</td><td>${esc(m.sheet)}</td><td>${m.cfrCode}</td><td class="num">${eur(m.amount)}</td></tr>`
     )
     .join('\n');
   const warn = [...input.warnings, ...input.unmatchedCodes.map((u) => `Unmatched CfR code ${u.cfrCode} on ${u.sheet} — not written.`)]

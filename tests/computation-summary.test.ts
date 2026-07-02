@@ -24,4 +24,27 @@ describe('computation summary', () => {
     expect(html).toContain('does not balance');
     expect(html).toContain('5000');               // mapping provenance
   });
+
+  it('escapes HTML in every interpolated string, including the mapping sheet', () => {
+    const html = renderComputationSummary({
+      clientName: 'Evil & Co <script>alert(1)</script>',
+      yearOfAssessment: 'YA2026',
+      netProfitPerAccounts: 0,
+      fills: [],
+      mappingRows: [
+        {
+          ledger: '4000 <script>alert(2)</script> & Sons',
+          cfrCode: 5000,
+          sheet: '<script>alert(3)</script>',
+          amount: -1,
+        },
+      ],
+      warnings: [],
+      unmatchedCodes: [],
+    });
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+    expect(html).toContain('Evil &amp; Co');
+    expect(html).toContain('&amp; Sons');
+  });
 });
