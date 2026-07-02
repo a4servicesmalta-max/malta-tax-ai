@@ -78,7 +78,7 @@ function badge(c){
   const cls = c>=.85?'hi':c>=.6?'mid':'lo';
   return `<span class="badge ${cls}">${Math.round(c*100)}%</span>`;
 }
-function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 
 document.getElementById('uploadForm').addEventListener('submit', async (e) => {
   e.preventDefault();

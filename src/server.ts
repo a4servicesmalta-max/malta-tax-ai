@@ -143,8 +143,11 @@ export function createApp() {
         session.fsFigures &&
         tieCheck(session.fsFigures, {
           netProfit,
+          // Asset-class codes only (sub-3000, consistent with prior-return.ts);
+          // let signs net so contra-assets reduce the total and positive-balance
+          // equity/liability codes (>=3000) are not miscounted as assets.
           totalAssets: fill.codeCells
-            .filter((c) => c.sheet === 'B_Sheet' && c.amount > 0)
+            .filter((c) => c.sheet === 'B_Sheet' && c.cfrCode < 3000)
             .reduce((a, c) => a + c.amount, 0),
         });
 
