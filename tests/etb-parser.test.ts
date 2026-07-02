@@ -50,6 +50,109 @@ describe('parseEtb', () => {
     const res = parseEtb(buf);
     expect(res.warnings.some((w) => /does not balance/i.test(w))).toBe(true);
   });
+
+  it('parses accountant-style number strings strictly ((1,234.56) → -1234.56)', () => {
+    const buf = syntheticEtbXlsx([
+      ['Code', 'Account', 'Balance'],
+      ['4000', 'Sales', '(1,234.56)'],
+      ['1200', 'Bank', '1,234.56'],
+    ]);
+    const res = parseEtb(buf);
+    expect(res.accounts).toEqual([
+      { accountCode: '4000', accountName: 'Sales', cyBalance: -1234.56, pyBalance: null },
+      { accountCode: '1200', accountName: 'Bank', cyBalance: 1234.56, pyBalance: null },
+    ]);
+    expect(res.warnings).toEqual([]);
+  });
+
+  it('treats a bare "-" as no balance and skips the row with a warning', () => {
+    const buf = syntheticEtbXlsx([
+      ['Code', 'Account', 'Balance'],
+      ['1200', 'Bank', 500],
+      ['3500', 'Loan', -500],
+      ['9999', 'Suspense', '-'],
+    ]);
+    const res = parseEtb(buf);
+    expect(res.accounts).toHaveLength(2);
+    expect(res.warnings.some((w) => /Suspense.*skipped: no numeric balance/i.test(w))).toBe(true);
+  });
+
+  it('applies Dr/Cr suffix signs ("500 Cr" → -500)', () => {
+    const buf = syntheticEtbXlsx([
+      ['Code', 'Account', 'Balance'],
+      ['1200', 'Bank', '500 Dr'],
+      ['4000', 'Sales', '500 Cr'],
+    ]);
+    const res = parseEtb(buf);
+    expect(res.accounts).toEqual([
+      { accountCode: '1200', accountName: 'Bank', cyBalance: 500, pyBalance: null },
+      { accountCode: '4000', accountName: 'Sales', cyBalance: -500, pyBalance: null },
+    ]);
+    expect(res.warnings).toEqual([]);
+  });
+
+  it('rejects European decimal-comma values ("1.234,56") instead of corrupting them', () => {
+    const buf = syntheticEtbXlsx([
+      ['Code', 'Account', 'Balance'],
+      ['1200', 'Bank', 500],
+      ['3500', 'Loan', -500],
+      ['8888', 'Foreign supplier', '1.234,56'],
+    ]);
+    const res = parseEtb(buf);
+    expect(res.accounts.find((a) => a.accountCode === '8888')).toBeUndefined();
+    expect(res.warnings.some((w) => /Foreign supplier.*skipped: no numeric balance/i.test(w))).toBe(true);
+  });
+
+  it('ignores opening/brought-forward columns and reads the closing balance', () => {
+    const buf = syntheticEtbXlsx([
+      ['Code', 'Name', 'Opening Balance', 'Closing Balance'],
+      ['1200', 'Bank', 999, 5000],
+      ['3801', 'Share capital', -999, -5000],
+    ]);
+    const res = parseEtb(buf);
+    expect(res.accounts).toEqual([
+      { accountCode: '1200', accountName: 'Bank', cyBalance: 5000, pyBalance: null },
+      { accountCode: '3801', accountName: 'Share capital', cyBalance: -5000, pyBalance: null },
+    ]);
+    expect(res.warnings).toEqual([]);
+  });
+
+  it('throws on genuinely ambiguous balance columns instead of silently picking one', () => {
+    const buf = syntheticEtbXlsx([
+      ['Code', 'Name', 'Balance', 'Final Balance'],
+      ['1200', 'Bank', 5000, 4000],
+      ['3801', 'Share capital', -5000, -4000],
+    ]);
+    expect(() => parseEtb(buf)).toThrow(/ambiguous balance columns.*"Balance".*"Final Balance"/i);
+  });
+
+  it('classifies "Debit Amount"/"Credit Amount" as a Dr/Cr pair, not a balance column', () => {
+    const buf = syntheticEtbXlsx([
+      ['Code', 'Name', 'Debit Amount', 'Credit Amount'],
+      ['1200', 'Bank', 5000, null],
+      ['4000', 'Sales', null, 5000],
+    ]);
+    const res = parseEtb(buf);
+    expect(res.accounts).toEqual([
+      { accountCode: '1200', accountName: 'Bank', cyBalance: 5000, pyBalance: null },
+      { accountCode: '4000', accountName: 'Sales', cyBalance: -5000, pyBalance: null },
+    ]);
+    expect(res.warnings).toEqual([]);
+  });
+
+  it('extracts prior-year Dr/Cr column pairs into pyBalance', () => {
+    const buf = syntheticEtbXlsx([
+      ['Code', 'Name', 'Debit', 'Credit', 'PY Debit', 'PY Credit'],
+      ['1200', 'Bank', 5000, null, 4000, null],
+      ['4000', 'Sales', null, 5000, null, 4000],
+    ]);
+    const res = parseEtb(buf);
+    expect(res.accounts).toEqual([
+      { accountCode: '1200', accountName: 'Bank', cyBalance: 5000, pyBalance: 4000 },
+      { accountCode: '4000', accountName: 'Sales', cyBalance: -5000, pyBalance: -4000 },
+    ]);
+    expect(res.warnings).toEqual([]);
+  });
 });
 
 import fs from 'node:fs';
@@ -65,6 +168,7 @@ describe.skipIf(real.length === 0)('parseEtb on real corpus ETBs', () => {
     it(`parses ${f} and balances`, () => {
       const res = parseEtb(fs.readFileSync(path.join(FIX, f)));
       expect(res.accounts.length).toBeGreaterThan(5);
+      expect(res.warnings.filter((w) => /does not balance/i.test(w))).toEqual([]);
     });
   }
 });

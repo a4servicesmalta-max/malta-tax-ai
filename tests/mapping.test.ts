@@ -30,11 +30,24 @@ describe('mapping', () => {
   });
 
   it('heuristic proposal maps recognizable names and prefers prior-year codes', () => {
-    const proposed = proposeMapping(ETB, { priorYearCodes: new Set([2155]) });
+    const proposed = proposeMapping(ETB, { priorYearCodes: new Set([2150]) });
     const bank = proposed.rules.find((r) => r.ledgerCode === '1200');
     expect(bank).toBeDefined();
     expect(bank!.sheet).toBe('B_Sheet');
+    // 0.95 base + 0.05 prior-year boost, capped at 0.99
+    expect(bank!.confidence).toBe(0.99);
     // no proposal for the suspense account — must be left for the human
     expect(proposed.rules.find((r) => r.ledgerCode === '9999')).toBeUndefined();
+  });
+
+  it('an exact ledgerCode rule wins over an earlier name-match rule', () => {
+    const profile: MappingProfile = {
+      rules: [
+        { ledgerNameMatch: 'bank', cfrCode: 9990, sheet: 'B_Sheet' },
+        { ledgerCode: '1200', cfrCode: 2150, sheet: 'B_Sheet' },
+      ],
+    };
+    const fill = applyMapping([ETB[0]], profile);
+    expect(fill.codeCells).toEqual([{ sheet: 'B_Sheet', cfrCode: 2150, amount: 5000 }]);
   });
 });
