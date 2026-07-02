@@ -1,0 +1,129 @@
+/**
+ * Parses raw client ETB spreadsheets (varying real-world layouts) into EtbAccount[].
+ * Sign convention: Dr +, Cr −. Nothing is guessed silently: unparseable files throw,
+ * imbalances and skipped rows come back as warnings for the preparer to see.
+ */
+import * as XLSX from 'xlsx';
+import type { EtbAccount } from './domain';
+
+export interface ParsedEtb {
+  accounts: EtbAccount[];
+  warnings: string[];
+  headerRow: number;
+  sheetName: string;
+}
+
+type ColKind = 'code' | 'name' | 'debit' | 'credit' | 'balance' | 'pyBalance' | 'pyDebit' | 'pyCredit';
+
+const HEADER_PATTERNS: Array<{ kind: ColKind; re: RegExp }> = [
+  { kind: 'pyDebit', re: /(prior|previous|py|comparat).*(debit|dr)|(debit|dr).*(prior|previous|py)/i },
+  { kind: 'pyCredit', re: /(prior|previous|py|comparat).*(credit|cr)|(credit|cr).*(prior|previous|py)/i },
+  { kind: 'pyBalance', re: /prior|previous|\bpy\b|comparat|last year/i },
+  { kind: 'debit', re: /^debits?$|\bdr\b/i },
+  { kind: 'credit', re: /^credits?$|\bcr\b/i },
+  { kind: 'balance', re: /final|adjusted|closing|balance|amount|\btb\b|current/i },
+  { kind: 'code', re: /^(a\/?c|n\/?c|nominal|acc(ount)?)?\s*(code|no|number|ref)\.?$|^code$|^n\/c$/i },
+  { kind: 'name', re: /name|description|account|narrative|details/i },
+];
+
+function classify(header: string): ColKind | null {
+  const h = header.trim();
+  if (!h) return null;
+  for (const p of HEADER_PATTERNS) if (p.re.test(h)) return p.kind;
+  return null;
+}
+
+function toNumber(v: unknown): number | null {
+  if (typeof v === 'number' && isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const cleaned = v.replace(/[€,\s]/g, '').replace(/^\((.*)\)$/, '-$1');
+    const n = parseFloat(cleaned);
+    return isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+export function parseEtb(buffer: Buffer): ParsedEtb {
+  const wb = XLSX.read(buffer, { type: 'buffer' });
+  let best: { score: number; sheet: string; row: number; cols: Map<number, ColKind> } | null = null;
+
+  for (const sheetName of wb.SheetNames) {
+    const rows: unknown[][] = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {
+      header: 1,
+      raw: true,
+      defval: null,
+    });
+    for (let r = 0; r < Math.min(rows.length, 30); r++) {
+      const cols = new Map<number, ColKind>();
+      (rows[r] ?? []).forEach((cell, c) => {
+        if (typeof cell === 'string') {
+          const kind = classify(cell);
+          if (kind && ![...cols.values()].includes(kind)) cols.set(c, kind);
+        }
+      });
+      const kinds = new Set(cols.values());
+      const hasAmount = kinds.has('balance') || (kinds.has('debit') && kinds.has('credit'));
+      const hasName = kinds.has('name') || kinds.has('code');
+      if (hasAmount && hasName) {
+        const score = cols.size;
+        if (!best || score > best.score) best = { score, sheet: sheetName, row: r, cols };
+      }
+    }
+  }
+  if (!best) throw new Error('Could not locate an ETB header row in any sheet (looked in first 30 rows).');
+
+  const rows: unknown[][] = XLSX.utils.sheet_to_json(wb.Sheets[best.sheet], {
+    header: 1,
+    raw: true,
+    defval: null,
+  });
+  const col = (kind: ColKind): number | null => {
+    for (const [c, k] of best!.cols) if (k === kind) return c;
+    return null;
+  };
+  const cCode = col('code');
+  const cName = col('name');
+  const cDr = col('debit');
+  const cCr = col('credit');
+  const cBal = col('balance');
+  const cPy = col('pyBalance');
+  const cPyDr = col('pyDebit');
+  const cPyCr = col('pyCredit');
+
+  const warnings: string[] = [];
+  const accounts: EtbAccount[] = [];
+  for (let r = best.row + 1; r < rows.length; r++) {
+    const row = rows[r] ?? [];
+    const name = cName != null ? String(row[cName] ?? '').trim() : '';
+    const codeRaw = cCode != null ? row[cCode] : null;
+    const code = codeRaw != null ? String(codeRaw).trim() : '';
+    if (!name && !code) continue;
+    if (/^total/i.test(name) || /^total/i.test(code)) continue;
+
+    let cy: number | null = null;
+    if (cBal != null) cy = toNumber(row[cBal]);
+    else if (cDr != null && cCr != null) {
+      const dr = toNumber(row[cDr]) ?? 0;
+      const cr = toNumber(row[cCr]) ?? 0;
+      cy = dr - cr;
+      if (toNumber(row[cDr]) === null && toNumber(row[cCr]) === null) cy = null;
+    }
+    if (cy === null) {
+      if (name || code) warnings.push(`Row ${r + 1} ("${name || code}") skipped: no numeric balance.`);
+      continue;
+    }
+    let py: number | null = null;
+    if (cPy != null) py = toNumber(row[cPy]);
+    else if (cPyDr != null && cPyCr != null) {
+      const d = toNumber(row[cPyDr]);
+      const c = toNumber(row[cPyCr]);
+      py = d === null && c === null ? null : (d ?? 0) - (c ?? 0);
+    }
+    accounts.push({ accountCode: code || name, accountName: name || code, cyBalance: cy, pyBalance: py });
+  }
+
+  const sum = accounts.reduce((a, x) => a + x.cyBalance, 0);
+  if (Math.abs(sum) > 1) warnings.push(`ETB does not balance: net ${sum.toFixed(2)} (should be 0).`);
+  if (accounts.length === 0) throw new Error('Header row found but no account rows could be parsed.');
+  return { accounts, warnings, headerRow: best.row, sheetName: best.sheet };
+}
