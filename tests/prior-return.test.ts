@@ -187,6 +187,25 @@ describe('prior-return', () => {
     const review = await reviewPriorReturn(prior);
     expect(review.findings.filter((f) => f.severity === 'error')).toEqual([]);
     expect(review.convention).toBe('positive');
+    // −sum(Income) is only meaningful for signed returns; a positive-convention
+    // return (revenue + expenses both positive) would yield a silent wrong figure.
+    expect(review.impliedNetProfit).toBeNull();
+  });
+
+  it('reviewPriorReturn keeps impliedNetProfit for signed returns only', async () => {
+    const prior = await syntheticCfrWorkbook({
+      bSheet: [
+        { row: 10, code: 2150, value: 4000 },
+        { row: 12, code: 3801, value: -4000 },
+      ],
+      income: [
+        { row: 5, code: 5000, value: -70000 },
+        { row: 6, code: 6173, value: 50000 },
+      ],
+    });
+    const review = await reviewPriorReturn(prior);
+    expect(review.convention).toBe('signed');
+    expect(review.impliedNetProfit).toBe(20000);
   });
 
   it('reviewPriorReturn does not warn about value-less code rows (normal on real returns)', async () => {

@@ -151,8 +151,14 @@ export interface PriorReturnReview {
   findings: PriorReviewFinding[];
   /** Sum of B_Sheet code values (~0 for signed returns, gross for positive returns). */
   balanceSheetNet: number;
-  /** −(sum of Income code values) = net profit implied by the filed return. */
-  impliedNetProfit: number;
+  /**
+   * −(sum of Income code values) = net profit implied by the filed return.
+   * Only meaningful for 'signed'-convention returns; null otherwise. A
+   * positive-convention return sums revenue + expenses into a nonsense figure,
+   * and per-code-class heuristics could themselves produce a silent wrong
+   * number — null forces manual entry, the safe default for this tool.
+   */
+  impliedNetProfit: number | null;
   /** Detected sign convention of the filed return. */
   convention: PriorReturnConvention;
 }
@@ -174,7 +180,7 @@ export async function reviewPriorReturn(buffer: Buffer): Promise<PriorReturnRevi
         },
       ],
       balanceSheetNet: 0,
-      impliedNetProfit: 0,
+      impliedNetProfit: null,
       convention: 'unknown',
     };
   }
@@ -182,7 +188,8 @@ export async function reviewPriorReturn(buffer: Buffer): Promise<PriorReturnRevi
   const bs = values.filter((v) => v.sheet === 'B_Sheet' && v.value !== null);
   const inc = values.filter((v) => v.sheet === 'Income' && v.value !== null);
   const { convention, balanceSheetNet } = detectConvention(values);
-  const impliedNetProfit = round2(-inc.reduce((a, v) => a + (v.value as number), 0));
+  const impliedNetProfit =
+    convention === 'signed' ? round2(-inc.reduce((a, v) => a + (v.value as number), 0)) : null;
   if (convention === 'unknown' && bs.length > 0) {
     const top = [...bs]
       .sort((a, b) => Math.abs(b.value as number) - Math.abs(a.value as number))
