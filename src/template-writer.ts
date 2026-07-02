@@ -124,7 +124,9 @@ function setCell(sheetXml: string, ref: string, value: number, p: string): strin
     }
     inner = inner.slice(0, insertAt) + newCell + inner.slice(insertAt);
   }
-  return sheetXml.replace(rowRe, `$1${inner}$3`);
+  // Function replacer: a string replacement would corrupt content containing
+  // `$` patterns (e.g. absolute refs like $E$10 — JS treats `$1` as a backref).
+  return sheetXml.replace(rowRe, (_all, open, _inner, close) => open + inner + close);
 }
 
 /** Force Excel to fully recalculate when the file is opened. */
