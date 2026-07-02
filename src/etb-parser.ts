@@ -59,10 +59,13 @@ function toNumber(v: unknown): number | null {
     sign *= -1;
     s = paren[1];
   }
-  // European decimal-comma guard: a comma after the last dot (e.g. 1.234,56)
-  // would be corrupted by comma-stripping — reject instead.
-  if (s.includes(',') && s.includes('.') && s.lastIndexOf(',') > s.lastIndexOf('.')) return null;
-  s = s.replace(/,/g, ''); // thousands separators
+  // Commas are only accepted as genuine thousands groups (1,234 / 12,345,678.90).
+  // Anything else (1.234,56 / 1234,56 / 1,23) is ambiguous or European
+  // decimal-comma notation and would be corrupted by comma-stripping — reject.
+  if (s.includes(',')) {
+    if (!/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) return null;
+    s = s.replace(/,/g, '');
+  }
   if (!/^-?\d+(\.\d+)?$/.test(s)) return null;
   return Number(s) * sign;
 }
@@ -135,7 +138,13 @@ export function parseEtb(buffer: Buffer): ParsedEtb {
     const codeRaw = cCode != null ? row[cCode] : null;
     const code = codeRaw != null ? String(codeRaw).trim() : '';
     if (!name && !code) continue;
-    if (/^(grand\s+)?total|^net\s/i.test(name) || /^(grand\s+)?total|^net\s/i.test(code)) continue;
+    // Summary rows (totals, net assets/profit lines) are skipped LOUDLY so real
+    // accounts like "Net wages payable" are never dropped invisibly.
+    const summaryRe = /^(grand\s+)?total|^net (assets|liabilit|profit|loss|equity)/i;
+    if (summaryRe.test(name) || summaryRe.test(code)) {
+      warnings.push(`Row ${r + 1} ("${name || code}") skipped as summary row.`);
+      continue;
+    }
 
     let cy: number | null = null;
     if (cBal != null) cy = toNumber(row[cBal]);

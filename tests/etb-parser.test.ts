@@ -18,7 +18,8 @@ describe('parseEtb', () => {
       { accountCode: '4000', accountName: 'Sales', cyBalance: -80000, pyBalance: null },
       { accountCode: '5000', accountName: 'Cost of sales', cyBalance: 75000, pyBalance: null },
     ]);
-    expect(res.warnings).toEqual([]);
+    // summary rows are skipped loudly, never silently
+    expect(res.warnings).toEqual(['Row 6 ("Totals") skipped as summary row.']);
   });
 
   it('parses single-balance + prior-year columns', () => {
@@ -101,6 +102,39 @@ describe('parseEtb', () => {
     const res = parseEtb(buf);
     expect(res.accounts.find((a) => a.accountCode === '8888')).toBeUndefined();
     expect(res.warnings.some((w) => /Foreign supplier.*skipped: no numeric balance/i.test(w))).toBe(true);
+  });
+
+  it('rejects comma values that are not genuine thousands groups ("1234,56", "1,23")', () => {
+    const buf = syntheticEtbXlsx([
+      ['Code', 'Account', 'Balance'],
+      ['1200', 'Bank', 500],
+      ['3500', 'Loan', -500],
+      ['8881', 'Foreign supplier A', '1234,56'],
+      ['8882', 'Foreign supplier B', '1,23'],
+    ]);
+    const res = parseEtb(buf);
+    expect(res.accounts).toHaveLength(2);
+    expect(res.warnings.some((w) => /Foreign supplier A.*skipped: no numeric balance/i.test(w))).toBe(true);
+    expect(res.warnings.some((w) => /Foreign supplier B.*skipped: no numeric balance/i.test(w))).toBe(true);
+  });
+
+  it('keeps "Net wages payable" accounts but skips summary rows with a named warning', () => {
+    const buf = syntheticEtbXlsx([
+      ['Code', 'Account', 'Balance'],
+      ['2210', 'Net wages payable', 500],
+      ['1200', 'Bank', -500],
+      [null, 'Net assets', 0],
+      [null, 'Grand Total', 0],
+    ]);
+    const res = parseEtb(buf);
+    expect(res.accounts).toEqual([
+      { accountCode: '2210', accountName: 'Net wages payable', cyBalance: 500, pyBalance: null },
+      { accountCode: '1200', accountName: 'Bank', cyBalance: -500, pyBalance: null },
+    ]);
+    expect(res.warnings).toEqual([
+      'Row 4 ("Net assets") skipped as summary row.',
+      'Row 5 ("Grand Total") skipped as summary row.',
+    ]);
   });
 
   it('ignores opening/brought-forward columns and reads the closing balance', () => {
