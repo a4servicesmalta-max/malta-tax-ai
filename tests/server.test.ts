@@ -32,6 +32,24 @@ describe('server', () => {
     expect(res.body.interview.questions.length).toBeGreaterThan(0);
   });
 
+  // A MulterError (here: an unexpected multipart field) is thrown by the
+  // upload.fields middleware before any route try/catch. The error-handling
+  // middleware must translate it into a JSON 400, not let it fall through to
+  // Express's default plain-text 500.
+  it('translates a multer error (unexpected field) into a JSON 400', async () => {
+    const app = createApp();
+    const { etb, template } = await fixtures();
+    const res = await request(app)
+      .post('/api/session')
+      .attach('etb', etb, 'etb.xlsx')
+      .attach('template', template, 'template.xlsx')
+      .attach('bogus', Buffer.from('x'), 'bogus.bin'); // field multer does not expect
+    expect(res.status).toBe(400);
+    expect(res.headers['content-type']).toMatch(/application\/json/);
+    expect(typeof res.body.error).toBe('string');
+    expect(res.body.error.length).toBeGreaterThan(0);
+  });
+
   it('refuses to generate while accounts are unmapped', async () => {
     const app = createApp();
     const { etb, template } = await fixtures();

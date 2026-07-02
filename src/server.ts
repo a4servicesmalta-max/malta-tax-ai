@@ -193,6 +193,16 @@ export function createApp() {
   });
 
   app.use(express.static(path.join(__dirname, '..', 'public')));
+
+  // Multer throws (oversized upload > 60MB, unexpected field, etc.) from the
+  // upload.fields middleware BEFORE any route try/catch runs. Without this
+  // 4-arg error handler those errors reach Express's default handler and become
+  // a plain-text 500, breaking the JSON {error} contract every client relies on.
+  // Translate MulterError (and any error that reaches here) into a 400 JSON.
+  app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    res.status(400).json({ error: err.message });
+  });
+
   return app;
 }
 
