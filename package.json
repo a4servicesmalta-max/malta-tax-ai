@@ -12,6 +12,7 @@
     "replay": "tsx scripts/replay.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.109.1",
     "express": "^4.19.2",
     "jszip": "^3.10.1",
     "multer": "^2.0.1",
