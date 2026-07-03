@@ -42,6 +42,7 @@ npm run replay -- --etb <etb.xlsx> --filed <filed-return.xlsx> [--prior <prior.x
 4. `proposeMappingAI` proposes CoA→CfR-code rules (**proposal only**; heuristic fallback; default model `claude-fable-5`). Grounded by the prior return's codes when present.
 5. `buildInterview` builds the Act-grounded tax questionnaire with deterministic pre-answers from the ETB.
 6. Preparer reviews/edits mapping + answers in the UI (Step 2). Nothing auto-accepted.
+6b. **Tax computation BEFORE fill (added 2026-07-03):** `POST /api/session/:id/computation` → `computeTax()` (`src/tax-computation.ts`) builds the deterministic working paper (profit → add-backs → deductions → capital allowances → loss relief w/ carry-forward → chargeable income → 35% charge). The UI's "Prepare tax computation" button renders it and the Generate button stays disabled until it has been prepared; editing any mapping/answer invalidates it. The same computation is embedded at the top of summary.html. The CfR template remains the authoritative computation.
 7. `POST /generate`: `applyMapping` aggregates ETB figures by confirmed CfR code → `fillCfrReturn` writes each into column E of the matching code row (never touches formulas) + net profit into p3!E6 → sets `fullCalcOnLoad` so Excel/LibreOffice recomputes tax on open.
 8. Downloads: filled `return.xlsx` + `summary.html` (workings + provenance + any manual-entry items + warnings).
 

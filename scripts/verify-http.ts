@@ -74,7 +74,19 @@ async function main() {
     excluded: [],
   };
 
-  // 2. Generate WITHOUT acknowledgment -> blocked 400 mentioning prior-year return review.
+  // 2a. Prepare the tax computation working paper BEFORE generating (the intended flow).
+  const compRes = await fetch(`${BASE}/api/session/${s.sessionId}/computation`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rules: genBody.rules, answers: { depreciationAddBack: 1000 }, excluded: [] }),
+  });
+  const comp = (await compRes.json()).computation;
+  check('tax computation served before generation (200)', compRes.status === 200);
+  // net profit: −(−80000+75000) = 5000; +1000 depreciation = 6000 @35% = 2100
+  check('computation: chargeable income 6000', comp?.chargeableIncome === 6000);
+  check('computation: tax charge 2100 (35%)', comp?.taxCharge === 2100);
+
+  // 2b. Generate WITHOUT acknowledgment -> blocked 400 mentioning prior-year return review.
   const blocked = await fetch(`${BASE}/api/session/${s.sessionId}/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -20,6 +20,7 @@ import {
 import { proposeMappingAI } from './ai-mapper';
 import { applyMapping, netProfitFromMapping } from './mapping';
 import { buildInterview, fillsFromAnswers } from './interview';
+import { computeTax } from './tax-computation';
 import { fillCfrReturn } from './template-writer';
 import { renderComputationSummary } from './computation-summary';
 import { ANCHORS } from './template-map';
@@ -105,6 +106,32 @@ export function createApp() {
     }
   );
 
+  // The tax computation working paper — reviewed by the preparer BEFORE the
+  // return is filled. Same deterministic inputs as /generate, no file writes.
+  app.post('/api/session/:id/computation', (req, res) => {
+    const session = sessions.get(req.params.id);
+    if (!session) return res.status(404).json({ error: 'session not found' });
+    try {
+      const { rules, answers, excluded } = req.body as {
+        rules: MappingRule[];
+        answers: Record<string, number>;
+        excluded: string[];
+      };
+      const fill = applyMapping(
+        session.accounts.filter((a) => !(excluded ?? []).includes(a.accountCode)),
+        { rules: rules ?? [] }
+      );
+      if (fill.unmappedAccounts.length) {
+        return res.status(400).json({
+          error: `unmapped accounts remain: ${fill.unmappedAccounts.map((u) => u.code).join(', ')} — map or exclude each one`,
+        });
+      }
+      res.json({ computation: computeTax(netProfitFromMapping(fill), answers ?? {}) });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+    }
+  });
+
   app.post('/api/session/:id/generate', async (req, res) => {
     const session = sessions.get(req.params.id);
     if (!session) return res.status(404).json({ error: 'session not found' });
@@ -171,6 +198,7 @@ export function createApp() {
         clientName: clientName || 'Client',
         yearOfAssessment: yearOfAssessment || '',
         netProfitPerAccounts: netProfit,
+        computation: computeTax(netProfit, answers ?? {}),
         fills: interviewFills,
         mappingRows: session.accounts
           .filter((a) => fill.applied.has(a.accountCode))

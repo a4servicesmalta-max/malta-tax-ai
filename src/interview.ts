@@ -138,7 +138,7 @@ export function buildInterview(etb: EtbAccount[], ctx: InterviewContext): Interv
   return { questions };
 }
 
-const LABELS: Record<string, string> = {
+export const LABELS: Record<string, string> = {
   depreciationAddBack: 'Add back: depreciation/amortisation',
   finesPenaltiesAddBack: 'Add back: fines and penalties',
   donationsAddBack: 'Add back: donations/sponsorships',

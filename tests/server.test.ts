@@ -50,6 +50,44 @@ describe('server', () => {
     expect(res.body.error.length).toBeGreaterThan(0);
   });
 
+  it('serves the tax computation working paper before generation', async () => {
+    const app = createApp();
+    const { etb, template } = await fixtures();
+    const s = await request(app)
+      .post('/api/session')
+      .attach('etb', etb, 'etb.xlsx')
+      .attach('template', template, 'template.xlsx');
+    const rules = [
+      { ledgerCode: '1200', cfrCode: 2150, sheet: 'B_Sheet' },
+      { ledgerCode: '4000', cfrCode: 5000, sheet: 'Income' },
+    ];
+    const res = await request(app)
+      .post(`/api/session/${s.body.sessionId}/computation`)
+      .send({ rules, answers: { depreciationAddBack: 3000, lossesBroughtForward: 500 }, excluded: [] });
+    expect(res.status).toBe(200);
+    const c = res.body.computation;
+    // Sales −80000 (Cr) → net profit 80000; +3000 add-back − 500 losses → 82500 @35%
+    expect(c.netProfitPerAccounts).toBe(80000);
+    expect(c.adjustedProfit).toBe(83000);
+    expect(c.lossesUtilised).toBe(500);
+    expect(c.chargeableIncome).toBe(82500);
+    expect(c.taxCharge).toBe(28875);
+  });
+
+  it('refuses to serve a computation while accounts are unmapped', async () => {
+    const app = createApp();
+    const { etb, template } = await fixtures();
+    const s = await request(app)
+      .post('/api/session')
+      .attach('etb', etb, 'etb.xlsx')
+      .attach('template', template, 'template.xlsx');
+    const res = await request(app)
+      .post(`/api/session/${s.body.sessionId}/computation`)
+      .send({ rules: [], answers: {}, excluded: [] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/unmapped/i);
+  });
+
   it('refuses to generate while accounts are unmapped', async () => {
     const app = createApp();
     const { etb, template } = await fixtures();

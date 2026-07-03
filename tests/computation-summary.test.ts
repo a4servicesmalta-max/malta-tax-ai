@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { renderComputationSummary } from '../src/computation-summary';
+import { computeTax } from '../src/tax-computation';
 
 describe('computation summary', () => {
-  it('renders profit, adjustments, manual-entry flags and provenance', () => {
+  it('renders the tax computation, adjustments, manual-entry flags and provenance', () => {
     const html = renderComputationSummary({
       clientName: 'Test Client Ltd',
       yearOfAssessment: 'YA2026',
       netProfitPerAccounts: 78500,
+      computation: computeTax(78500, { depreciationAddBack: 3000, lossesBroughtForward: 1200 }),
       fills: [
         { anchorId: null, amount: 3000, label: 'Add back: depreciation/amortisation' },
         { anchorId: 'lossesBroughtForward', amount: 1200, label: 'Deduct: losses brought forward' },
@@ -23,6 +25,10 @@ describe('computation summary', () => {
     expect(html).toContain('depreciation');
     expect(html).toContain('does not balance');
     expect(html).toContain('5000');               // mapping provenance
+    // full working paper: adjusted 81,500 − losses 1,200 → chargeable 80,300 @35% = 28,105
+    expect(html).toContain('Chargeable income');
+    expect(html).toContain('80,300.00');
+    expect(html).toContain('28,105.00');
   });
 
   it('escapes HTML in every interpolated string, including the mapping sheet', () => {
@@ -30,6 +36,7 @@ describe('computation summary', () => {
       clientName: 'Evil & Co <script>alert(1)</script>',
       yearOfAssessment: 'YA2026',
       netProfitPerAccounts: 0,
+      computation: computeTax(0, {}),
       fills: [],
       mappingRows: [
         {

@@ -59,6 +59,10 @@
   <table id="mapTable"><thead><tr><th>Code</th><th>Account</th><th class="num">Balance €</th><th>CfR code</th><th>Sheet</th><th>Confidence</th><th>Exclude</th></tr></thead><tbody></tbody></table>
   <h3>Tax interview</h3>
   <div id="interview"></div>
+  <h3>Tax computation</h3>
+  <p class="muted">The tax computation is prepared and reviewed <strong>before</strong> the return is filled. Changing any mapping or answer invalidates it.</p>
+  <button id="computeBtn" disabled>Prepare tax computation</button>
+  <div id="compPanel"></div>
   <button id="generateBtn" disabled>Generate return</button>
   <div id="genMsgs"></div>
 </div>
@@ -71,7 +75,7 @@
 </div>
 
 <script>
-let SESSION = null, ACCOUNTS = [], QUESTIONS = [], PRIOR_REVIEW = null;
+let SESSION = null, ACCOUNTS = [], QUESTIONS = [], PRIOR_REVIEW = null, COMPUTED = false;
 
 function badge(c){
   if(c==null) return '<span class="badge none">unmapped</span>';
@@ -120,7 +124,58 @@ document.getElementById('uploadForm').addEventListener('submit', async (e) => {
     € <input type="number" class="answer" data-id="${esc(q.id)}" value="${q.preAnswer??''}" step="0.01">
     ${q.preAnswer!=null?'<span class="muted">(pre-filled from ETB — confirm)</span>':''}</label></p>`).join('');
   document.getElementById('step2').hidden = false;
-  tb.addEventListener('input', refreshGate); tb.addEventListener('change', refreshGate);
+  tb.addEventListener('input', invalidateComputation); tb.addEventListener('change', invalidateComputation);
+  document.getElementById('interview').addEventListener('input', invalidateComputation);
+  refreshGate();
+});
+
+function invalidateComputation(){
+  if(COMPUTED){
+    COMPUTED = false;
+    document.getElementById('compPanel').innerHTML =
+      '<div class="warn">Inputs changed — prepare the tax computation again before generating.</div>';
+  }
+  refreshGate();
+}
+
+function collectInputs(){
+  const rules = [], excluded = [];
+  for(const tr of document.querySelectorAll('#mapTable tbody tr')){
+    const code = tr.dataset.code;
+    if(tr.querySelector('.excl').checked){ excluded.push(code); continue; }
+    rules.push({ ledgerCode: code, cfrCode: Number(tr.querySelector('.cfr').value), sheet: tr.querySelector('.sheet').value });
+  }
+  const answers = {};
+  for(const inp of document.querySelectorAll('.answer')) answers[inp.dataset.id] = Number(inp.value||0);
+  return { rules, excluded, answers };
+}
+
+const eur = n => n.toLocaleString('en-MT',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+document.getElementById('computeBtn').addEventListener('click', async ()=>{
+  const res = await fetch(`/api/session/${SESSION}/computation`, {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(collectInputs())
+  });
+  const data = await res.json();
+  const panel = document.getElementById('compPanel');
+  if(!res.ok){ panel.innerHTML = `<div class="warn">${esc(data.error)}</div>`; return; }
+  const c = data.computation;
+  const row = (label, amount, cls='') => `<tr class="${cls}"><td>${esc(label)}</td><td class="num">${eur(amount)}</td></tr>`;
+  panel.innerHTML = `<table>
+    <tr><th>Item</th><th class="num">Amount €</th></tr>
+    ${row('Net profit/(loss) before tax per financial statements', c.netProfitPerAccounts)}
+    ${c.addBacks.map(l=>row(l.label, l.amount)).join('')}
+    ${c.addBacks.length?row('Total add-backs', c.totalAddBacks):''}
+    ${c.deductions.map(l=>row('Less: '+l.label, -l.amount)).join('')}
+    ${row('Adjusted profit/(loss) before capital allowances', c.adjustedProfit)}
+    ${c.capitalAllowances?row('Less: capital allowances', -c.capitalAllowances)+row('Income/(loss) after capital allowances', c.incomeAfterCapitalAllowances):''}
+    ${c.lossesBroughtForward?row('Losses brought forward (memo)', c.lossesBroughtForward)+row('Less: losses utilised this year', -c.lossesUtilised)+row('Losses carried forward (memo)', c.lossesCarriedForward):''}
+    ${row('Chargeable income', c.chargeableIncome)}
+    ${row('Tax charge @ 35%', c.taxCharge)}
+  </table>
+  ${(c.notes||[]).map(n=>`<div class="warn">${esc(n)}</div>`).join('')}
+  <div class="ok">Computation prepared — review the figures above, then generate the return.</div>`;
+  COMPUTED = true;
   refreshGate();
 });
 
@@ -163,22 +218,17 @@ function refreshGate(){
     const ack = document.getElementById('priorAck');
     if(!ack || !ack.checked) allOk = false;
   }
-  document.getElementById('generateBtn').disabled = !allOk;
+  document.getElementById('computeBtn').disabled = !allOk;
+  // The return can only be generated AFTER the tax computation has been
+  // prepared and reviewed for the current inputs.
+  document.getElementById('generateBtn').disabled = !allOk || !COMPUTED;
 }
 
 document.getElementById('generateBtn').addEventListener('click', async ()=>{
-  const rules = [], excluded = [];
-  for(const tr of document.querySelectorAll('#mapTable tbody tr')){
-    const code = tr.dataset.code;
-    if(tr.querySelector('.excl').checked){ excluded.push(code); continue; }
-    rules.push({ ledgerCode: code, cfrCode: Number(tr.querySelector('.cfr').value), sheet: tr.querySelector('.sheet').value });
-  }
-  const answers = {};
-  for(const inp of document.querySelectorAll('.answer')) answers[inp.dataset.id] = Number(inp.value||0);
   const priorAck = document.getElementById('priorAck');
   const res = await fetch(`/api/session/${SESSION}/generate`, {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ rules, answers, excluded,
+    body: JSON.stringify({ ...collectInputs(),
       clientName: document.getElementById('clientName').value,
       yearOfAssessment: document.getElementById('ya').value,
       priorReviewAcknowledged: !!(priorAck && priorAck.checked) })
