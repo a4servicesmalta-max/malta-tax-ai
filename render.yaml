@@ -1,0 +1,19 @@
+# Render Blueprint. In Render: New + → Blueprint → point at this repo.
+# The AI features are optional — set CLAUDE_CODE_OAUTH_TOKEN (Max/Pro, preferred)
+# and/or ANTHROPIC_API_KEY in the service's Environment; leave unset to run the
+# tool with heuristic mapping and the reasonableness review reporting unavailable.
+services:
+  - type: web
+    name: malta-tax-ai
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: CLAUDE_CODE_OAUTH_TOKEN
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false

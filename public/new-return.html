@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New Return — Malta Tax AI</title>
+<link rel="stylesheet" href="https://db.onlinewebfonts.com/c/5ac3fe7c6abd2f62067f266d89671492?family=HelveticaNowDisplay-Medium">
+<link rel="stylesheet" href="https://db.onlinewebfonts.com/c/1aa3377e489837a26d019bba501e779d?family=HelveticaNowDisplayW01-Rg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{--font-heading:'HelveticaNowDisplay-Medium','Helvetica Neue',Arial,sans-serif;--font-body:'HelveticaNowDisplayW01-Rg','Helvetica Neue',Arial,sans-serif;--mono:'JetBrains Mono',monospace;--ink:#14161a;--indigo:#494fdf;--indigo2:#8388ea;--paper:#faf9f7;--line:#e7e5e0}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--paper);font-family:var(--font-body);color:var(--ink)}
+  a{text-decoration:none}
+  input,select,button{font-family:var(--font-body)}
+  input:focus,select:focus{border-color:var(--indigo) !important;outline:none}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:#d5d1c9;border-radius:9999px}
+  .sbhide{scrollbar-width:none}
+  .sbhide::-webkit-scrollbar{display:none}
+  .btn{display:inline-flex;align-items:center;gap:10px;border:none;border-radius:9999px;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:background-color .2s,opacity .2s}
+  .btn-primary{background:var(--indigo);color:#fff;padding:14px 30px;font-size:15px}
+  .btn-primary:hover{background:#3a40c4}
+  .btn-primary:disabled{background:#c9c6bf;cursor:not-allowed}
+  .btn-ghost{background:transparent;border:1px solid #ddd9d2;color:#5c5951;padding:12px 24px;font-size:14px}
+  .btn-sm{background:var(--indigo);color:#fff;padding:12px 24px;font-size:14px}
+  .btn-sm:disabled{background:#c9c6bf;cursor:not-allowed}
+  .card{border:1px solid var(--line);background:#fff;border-radius:14px;padding:22px;margin-bottom:16px}
+  .callout{border-radius:12px;padding:14px 18px;margin:12px 0;font-size:14px;line-height:1.5}
+  .c-ok{background:rgba(42,160,106,0.08);border:1px solid rgba(42,160,106,0.3);color:#1f7a51}
+  .c-warn{background:rgba(224,138,44,0.08);border:1px solid rgba(224,138,44,0.35);color:#9a6700}
+  .c-err{background:rgba(209,73,58,0.07);border:1px solid rgba(209,73,58,0.35);color:#b23a2c}
+  .fld{width:100%;padding:11px 14px;border-radius:10px;border:1px solid #ddd9d2;background:#fff;font-size:14px;color:var(--ink)}
+  .mono{font-family:var(--mono)}
+  h2.step-h{font-family:var(--font-heading);font-size:30px;font-weight:500;letter-spacing:-0.02em;margin:0 0 8px}
+  h3.sec-h{font-family:var(--font-heading);font-size:18px;color:var(--ink);margin:0}
+  .kick{font-family:var(--mono);font-size:12px;letter-spacing:0.12em;color:#8a857c;margin-bottom:10px}
+</style>
+</head>
+<body>
+<div style="display:flex;height:100vh;width:100%;background:var(--paper);position:relative;overflow:hidden">
+
+  <!-- SIDEBAR -->
+  <div style="width:270px;flex-shrink:0;background:#0b0b0d;border-right:1px solid rgba(255,255,255,0.08);display:flex;flex-direction:column;padding:28px 0 22px;position:relative;overflow:hidden">
+    <div style="position:absolute;top:-10%;left:-10%;width:44%;height:36%;background:var(--indigo);filter:blur(100px);border-radius:9999px;opacity:.35;pointer-events:none"></div>
+    <div style="padding:0 20px;margin-bottom:36px;display:flex;align-items:center;gap:11px;position:relative">
+      <img src="assets/vacei-logo.png" alt="VACEI" style="width:28px;height:32px;object-fit:contain;display:block">
+      <span style="font-family:var(--font-heading);font-size:17px;letter-spacing:-0.01em;color:#fff">Malta Tax <span style="color:var(--indigo2)">AI</span></span>
+    </div>
+    <nav style="flex:1;padding:0 14px;display:flex;flex-direction:column;gap:6px;position:relative">
+      <a href="/dashboard" style="display:flex;align-items:center;padding:13px 15px;border-radius:12px;color:rgba(255,255,255,0.58)"><span style="display:flex;margin-right:14px"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span><span style="font-size:14px">Dashboard</span></a>
+      <a href="/new-return" style="position:relative;display:flex;align-items:center;padding:13px 15px;border-radius:12px;background:rgba(255,255,255,0.08);color:#fff"><div style="position:absolute;left:-14px;width:3px;height:22px;background:var(--indigo);border-radius:0 9999px 9999px 0"></div><span style="display:flex;margin-right:14px"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#8388ea" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></span><span style="font-size:14px">New Return</span></a>
+      <a href="/dashboard" style="display:flex;align-items:center;padding:13px 15px;border-radius:12px;color:rgba(255,255,255,0.58)"><span style="display:flex;margin-right:14px"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/></svg></span><span style="font-size:14px">Returns</span></a>
+    </nav>
+    <div style="padding:0 14px;position:relative">
+      <a href="/login" style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:12px;color:#e07a6a;font-family:var(--mono);font-size:10px;letter-spacing:0.12em;text-transform:uppercase"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>Logout</a>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+    <header style="height:74px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;background:rgba(250,249,247,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--line);flex-shrink:0;z-index:40">
+      <h1 style="font-family:var(--font-heading);font-size:21px;font-weight:500;letter-spacing:-0.02em;margin:0">New Return</h1>
+      <div style="display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12px">
+        <span id="lbl1" style="display:inline-flex;align-items:center;gap:7px"><span id="dot1" style="width:20px;height:20px;border-radius:9999px;display:inline-flex;align-items:center;justify-content:center;font-size:11px">1</span>Upload</span>
+        <span style="width:20px;height:1px;background:#d5d1c9"></span>
+        <span id="lbl2" style="display:inline-flex;align-items:center;gap:7px"><span id="dot2" style="width:20px;height:20px;border-radius:9999px;display:inline-flex;align-items:center;justify-content:center;font-size:11px">2</span>Confirm</span>
+        <span style="width:20px;height:1px;background:#d5d1c9"></span>
+        <span id="lbl3" style="display:inline-flex;align-items:center;gap:7px"><span id="dot3" style="width:20px;height:20px;border-radius:9999px;display:inline-flex;align-items:center;justify-content:center;font-size:11px">3</span>Download</span>
+      </div>
+    </header>
+
+    <main class="sbhide" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:32px 28px 60px">
+      <div style="max-width:900px;margin:0 auto;width:100%">
+
+        <!-- STEP 1 -->
+        <section id="step1">
+          <div class="kick">&gt; STEP_01</div>
+          <h2 class="step-h">Upload</h2>
+          <p style="font-size:16px;color:#5c5951;margin:0 0 28px;max-width:640px;line-height:1.55">Upload the ETB, financial statements and blank CfR template. No figure is ever produced by AI — the official template computes the tax.</p>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+            <div style="border:2px dashed #d5d1c9;border-radius:14px;background:#fff;padding:22px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-family:var(--font-heading);font-size:15px">ETB (Excel)</span><span class="mono" style="font-size:10px;color:var(--indigo);letter-spacing:0.06em">REQUIRED</span></div>
+              <p style="font-size:13px;color:#8a857c;margin:0 0 12px">.xlsx, .xls</p>
+              <label style="display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:9999px;background:#f6f5f2;border:1px solid var(--line);font-size:13px;color:#3a3d40;cursor:pointer">Choose file<input id="f_etb" type="file" accept=".xlsx,.xls" style="display:none"></label>
+              <span id="lbl_etb" class="mono" style="display:block;margin-top:10px;font-size:11px;color:#a8a49c">No file chosen</span>
+            </div>
+            <div style="border:2px dashed #d5d1c9;border-radius:14px;background:#fff;padding:22px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-family:var(--font-heading);font-size:15px">Blank CfR template</span><span class="mono" style="font-size:10px;color:var(--indigo);letter-spacing:0.06em">REQUIRED</span></div>
+              <p style="font-size:13px;color:#8a857c;margin:0 0 12px">.xlsx, .xlsm</p>
+              <label style="display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:9999px;background:#f6f5f2;border:1px solid var(--line);font-size:13px;color:#3a3d40;cursor:pointer">Choose file<input id="f_template" type="file" accept=".xlsx,.xlsm" style="display:none"></label>
+              <span id="lbl_template" class="mono" style="display:block;margin-top:10px;font-size:11px;color:#a8a49c">No file chosen</span>
+            </div>
+            <div style="border:2px dashed var(--line);border-radius:14px;background:#fff;padding:22px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-family:var(--font-heading);font-size:15px">Financial statements</span><span class="mono" style="font-size:10px;color:#a8a49c;letter-spacing:0.06em">OPTIONAL</span></div>
+              <p style="font-size:13px;color:#8a857c;margin:0 0 12px">.xlsx, .xls</p>
+              <label style="display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:9999px;background:#f6f5f2;border:1px solid var(--line);font-size:13px;color:#3a3d40;cursor:pointer">Choose file<input id="f_fs" type="file" accept=".xlsx,.xls" style="display:none"></label>
+              <span id="lbl_fs" class="mono" style="display:block;margin-top:10px;font-size:11px;color:#a8a49c">No file chosen</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div><label style="display:block;font-size:13px;color:#5c5951;margin-bottom:6px">Client name</label><input id="clientName" placeholder="ABC Trading Ltd" class="fld"></div>
+              <div><label style="display:block;font-size:13px;color:#5c5951;margin-bottom:6px">Year of assessment</label><input id="ya" placeholder="YA2026" class="fld"></div>
+            </div>
+          </div>
+
+          <div style="border:1px solid #d7d9f2;background:#f4f4fb;border-radius:14px;padding:20px 22px;margin-bottom:22px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-family:var(--font-heading);font-size:15px">Prior-year filed return — reviewed before use</span><span class="mono" style="font-size:10px;color:var(--indigo);letter-spacing:0.06em">OPTIONAL</span></div>
+            <p style="font-size:13.5px;color:#5c5951;margin:0 0 12px;line-height:1.55;max-width:640px">Improves mapping accuracy. If uploaded, it's automatically checked for errors (balance-sheet ties, missing values) before it's used — you'll see the findings in Step 2.</p>
+            <label style="display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:9999px;background:#fff;border:1px solid #d7d9f2;font-size:13px;color:#3a3d40;cursor:pointer">Choose file<input id="f_prior" type="file" accept=".xlsx,.xlsm" style="display:none"></label>
+            <span id="lbl_prior" class="mono" style="margin-left:10px;font-size:11px;color:var(--indigo)">No file chosen</span>
+          </div>
+
+          <div id="uploadMsgs"></div>
+
+          <button id="analyseBtn" class="btn btn-primary" disabled>
+            <span id="analyseIdle" style="display:inline-flex;align-items:center;gap:10px">Analyse<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+            <span id="analyseBusy" style="display:none;align-items:center;gap:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Analysing…</span>
+          </button>
+          <p style="font-size:12.5px;color:#a8a49c;margin:12px 0 0">ETB and CfR template are required to continue.</p>
+        </section>
+
+        <!-- STEP 2 -->
+        <section id="step2" style="display:none">
+          <div class="kick">&gt; STEP_02</div>
+          <h2 class="step-h" style="margin-bottom:24px">Confirm mapping &amp; tax interview</h2>
+
+          <div id="priorReviewPanel"></div>
+          <div id="crossCheck"></div>
+
+          <div class="card">
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:16px"><h3 class="sec-h">Account mapping</h3><span id="proposalSource" class="mono" style="font-size:11px;color:#8a857c"></span></div>
+            <div style="overflow-x:auto">
+              <table style="width:100%;font-size:13.5px;border-collapse:separate;border-spacing:0 6px">
+                <thead><tr class="mono" style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:#a8a49c;text-align:left"><th style="padding:0 10px 6px">Code</th><th style="padding:0 10px 6px">Account</th><th style="padding:0 10px 6px;text-align:right">Balance €</th><th style="padding:0 10px 6px">CfR code</th><th style="padding:0 10px 6px">Sheet</th><th style="padding:0 10px 6px">Conf.</th><th style="padding:0 10px 6px">Excl.</th></tr></thead>
+                <tbody id="mapBody"></tbody>
+              </table>
+            </div>
+            <p id="mapNote" style="font-size:12.5px;color:#8a857c;margin:14px 0 0">A row is valid once it has a CfR code or is excluded — unmapped rows block generation.</p>
+          </div>
+
+          <div class="card">
+            <h3 class="sec-h" style="margin-bottom:16px">Tax interview</h3>
+            <div id="interview" style="display:flex;flex-direction:column;gap:18px"></div>
+          </div>
+
+          <div class="card">
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px"><h3 class="sec-h">Tax computation</h3></div>
+            <p style="font-size:12.5px;color:#8a857c;margin:0 0 16px">The computation is prepared and reviewed before the return is filled. Changing any mapping or answer invalidates it.</p>
+            <button id="prepareBtn" class="btn btn-sm" disabled>Prepare tax computation</button>
+            <div id="compPanel"></div>
+            <div id="reviewWrap" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--line)">
+              <button id="reviewBtn" class="btn" style="background:transparent;border:1px solid #ddd9d2;color:var(--ink);padding:11px 22px;font-size:13.5px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#494fdf" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44"/></svg>Run reasonableness review (AI)</button>
+              <p style="font-size:12px;color:#a8a49c;margin:8px 0 0">Advisory second opinion — flags points to check. Never changes figures and is not required to generate.</p>
+              <div id="reviewPanel"></div>
+            </div>
+          </div>
+
+          <div id="genMsgs"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-top:8px">
+            <button id="backBtn" class="btn btn-ghost"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>Back</button>
+            <button id="generateBtn" class="btn btn-primary" disabled>Generate return<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+          </div>
+          <p style="text-align:right;font-size:12px;color:#a8a49c;margin:10px 0 0">Generate unlocks once a computation is prepared. The reasonableness review is never required.</p>
+        </section>
+
+        <!-- STEP 3 -->
+        <section id="step3" style="display:none">
+          <div class="kick">&gt; STEP_03</div>
+          <h2 class="step-h">Download</h2>
+          <p style="font-size:16px;color:#5c5951;margin:0 0 28px">Your return has been generated. No figure on it was produced by AI.</p>
+          <div style="display:flex;flex-direction:column;gap:14px;max-width:620px">
+            <a id="dlReturn" href="#" style="display:flex;align-items:center;gap:16px;padding:22px;border-radius:14px;border:1px solid var(--line);background:#fff">
+              <div style="width:48px;height:48px;border-radius:12px;background:rgba(73,79,223,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#494fdf" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></div>
+              <div style="flex:1"><div style="font-family:var(--font-heading);font-size:16px">Filled tax return (.xlsx)</div><p style="font-size:13px;color:#8a857c;margin:4px 0 0">Open in Excel or LibreOffice — the template recalculates the tax on open.</p></div>
+            </a>
+            <a id="dlSummary" href="#" target="_blank" style="display:flex;align-items:center;gap:16px;padding:22px;border-radius:14px;border:1px solid var(--line);background:#fff">
+              <div style="width:48px;height:48px;border-radius:12px;background:rgba(73,79,223,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#494fdf" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h8M8 17h5"/></svg></div>
+              <div style="flex:1"><div style="font-family:var(--font-heading);font-size:16px">Computation summary (workings)</div><p style="font-size:13px;color:#8a857c;margin:4px 0 0">The computation table, adjustments, mapping provenance and warnings, in one page.</p></div>
+            </a>
+          </div>
+          <div class="callout c-ok" style="margin-top:22px;max-width:620px">No figure on this return was produced by AI — every amount came from the trial balance or your confirmed answers.</div>
+          <div style="display:flex;gap:14px;margin-top:24px">
+            <a href="/dashboard" class="btn btn-primary" style="padding:13px 26px;font-size:14px">Back to dashboard</a>
+            <button id="restartBtn" class="btn btn-ghost" style="color:var(--ink)">Start another return</button>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+let SESSION=null, ACCOUNTS=[], QUESTIONS=[], PRIOR_REVIEW=null, COMPUTED=false;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const eur=n=>Number(n).toLocaleString('en-MT',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+// ---- stepper ----
+function setStep(n){
+  $('step1').style.display=n===1?'':'none';
+  $('step2').style.display=n===2?'':'none';
+  $('step3').style.display=n===3?'':'none';
+  for(let i=1;i<=3;i++){
+    const dot=$('dot'+i), lbl=$('lbl'+i);
+    const active=n>=i;
+    dot.style.background=active?'#494fdf':'#e7e5e0';
+    dot.style.color=active?'#fff':'#a8a49c';
+    lbl.style.color=active?'#14161a':'#a8a49c';
+  }
+}
+setStep(1);
+
+// ---- file inputs ----
+[['f_etb','lbl_etb'],['f_template','lbl_template'],['f_fs','lbl_fs'],['f_prior','lbl_prior']].forEach(([inp,lbl])=>{
+  $(inp).addEventListener('change',e=>{
+    const f=e.target.files&&e.target.files[0];
+    $(lbl).textContent=f?f.name:'No file chosen';
+    $(lbl).style.color=f?'#1f7a51':(inp==='f_prior'?'#494fdf':'#a8a49c');
+    refreshAnalyse();
+  });
+});
+function refreshAnalyse(){ $('analyseBtn').disabled=!($('f_etb').files[0] && $('f_template').files[0]); }
+
+// ---- confidence badge ----
+function badge(c){
+  if(c==null) return '<span style="padding:3px 9px;border-radius:9999px;background:#efece6;color:#8a857c" class="mono" style-x>unmapped</span>';
+  const hi=c>=.85, mid=c>=.6;
+  const bg=hi?'rgba(42,160,106,0.12)':mid?'rgba(224,138,44,0.14)':'rgba(209,73,58,0.12)';
+  const fg=hi?'#1f7a51':mid?'#b06a1a':'#b23a2c';
+  const t=hi?'hi':mid?'mid':'lo';
+  return `<span class="mono" title="${Math.round(c*100)}%" style="padding:3px 9px;border-radius:9999px;background:${bg};color:${fg};font-size:10px">${t}</span>`;
+}
+
+// ---- ANALYSE ----
+$('analyseBtn').addEventListener('click', async ()=>{
+  if($('analyseBtn').disabled) return;
+  $('analyseIdle').style.display='none'; $('analyseBusy').style.display='inline-flex'; $('analyseBtn').disabled=true;
+  const fd=new FormData();
+  fd.append('etb',$('f_etb').files[0]);
+  fd.append('template',$('f_template').files[0]);
+  if($('f_fs').files[0]) fd.append('fs',$('f_fs').files[0]);
+  if($('f_prior').files[0]) fd.append('prior',$('f_prior').files[0]);
+  let res, data;
+  try{ res=await fetch('/api/session',{method:'POST',body:fd}); data=await res.json(); }
+  catch(err){ data={error:String(err)}; res={ok:false}; }
+  $('analyseIdle').style.display='inline-flex'; $('analyseBusy').style.display='none'; refreshAnalyse();
+  if(!res.ok){ $('uploadMsgs').innerHTML=`<div class="callout c-err">${esc(data.error||'Upload failed.')}</div>`; return; }
+  $('uploadMsgs').innerHTML='';
+  SESSION=data.sessionId; ACCOUNTS=data.accounts||[]; QUESTIONS=(data.interview&&data.interview.questions)||[]; PRIOR_REVIEW=data.priorReview||null; COMPUTED=false;
+  $('proposalSource').textContent=(data.proposal&&data.proposal.source==='ai')?'AI-proposed — confirm each':'heuristic proposal — confirm each';
+  renderPriorReview();
+  renderCrossCheck(data.crossCheck);
+  renderMapping(data.proposal&&data.proposal.rules||[]);
+  renderInterview();
+  $('compPanel').innerHTML=''; $('reviewWrap').style.display='none'; $('reviewPanel').innerHTML=''; $('genMsgs').innerHTML='';
+  setStep(2); refreshGate();
+});
+
+function renderPriorReview(){
+  const p=$('priorReviewPanel');
+  if(!PRIOR_REVIEW){ p.innerHTML=''; return; }
+  const f=PRIOR_REVIEW.findings||[];
+  if(!f.length){ p.innerHTML='<div class="callout c-ok">✓ Prior-year return reviewed — no errors found.</div>'; return; }
+  const hasErr=f.some(x=>x.severity==='error');
+  const rows=f.map(x=>`<div style="display:flex;gap:9px;font-size:13.5px;margin-top:6px;color:${x.severity==='error'?'#b23a2c':'#9a6700'}">${x.severity==='error'?'⛔':'⚠'} ${esc(x.message)}</div>`).join('');
+  const ack=hasErr?`<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13.5px;color:#14161a"><input type="checkbox" id="priorAck"> I have reviewed these prior-year findings and choose to proceed</label>`:'';
+  p.innerHTML=`<div class="callout ${hasErr?'c-err':'c-ok'}"><strong>Prior-year return review</strong>${rows}${ack}</div>`;
+  const a=$('priorAck'); if(a) a.addEventListener('change',refreshGate);
+}
+function renderCrossCheck(cc){
+  const el=$('crossCheck'); if(!cc){ el.innerHTML=''; return; }
+  el.innerHTML=cc.mismatches&&cc.mismatches.length
+    ? `<div class="callout c-warn">Prior-year cross-check: ${cc.mismatches.length} of ${cc.checkedCodes} codes do not reproduce last year's filed figures — review those mappings. ${cc.mismatches.map(m=>`code ${m.cfrCode}: filed €${m.priorReturnValue} vs mapped €${m.mappedPyValue}`).join('; ')}</div>`
+    : `<div class="callout c-ok">Prior-year cross-check passed: mapped PY balances reproduce the filed prior return (${cc.checkedCodes} codes).</div>`;
+}
+function renderMapping(rules){
+  const byCode=Object.fromEntries(rules.map(r=>[r.ledgerCode,r]));
+  const cell='padding:10px 12px;background:#f6f5f2';
+  $('mapBody').innerHTML=ACCOUNTS.map(a=>{
+    const p=byCode[a.accountCode];
+    return `<tr data-code="${esc(a.accountCode)}">
+      <td class="mono" style="${cell};border-radius:8px 0 0 8px">${esc(a.accountCode)}</td>
+      <td style="${cell}">${esc(a.accountName)}</td>
+      <td class="mono" style="${cell};text-align:right">${eur(a.cyBalance)}</td>
+      <td style="${cell}"><input type="number" class="cfr mono" value="${p?p.cfrCode:''}" style="width:88px;padding:5px 7px;border-radius:7px;border:1px solid #ddd9d2;background:#fff;font-size:12px"></td>
+      <td style="${cell}"><select class="sheet" style="padding:5px 6px;border-radius:7px;border:1px solid #ddd9d2;background:#fff;font-size:12px"><option${p&&p.sheet==='B_Sheet'?' selected':''}>B_Sheet</option><option${p&&p.sheet==='Income'?' selected':''}>Income</option></select></td>
+      <td style="${cell}">${badge(p?p.confidence:null)}</td>
+      <td style="${cell};border-radius:0 8px 8px 0"><input type="checkbox" class="excl"></td></tr>`;
+  }).join('');
+  $('mapBody').addEventListener('input',invalidate);
+  $('mapBody').addEventListener('change',invalidate);
+}
+function renderInterview(){
+  $('interview').innerHTML=QUESTIONS.map(q=>`
+    <div>
+      <p style="font-size:14.5px;color:#14161a;font-weight:600;margin:0 0 4px">${esc(q.text)}</p>
+      <p style="font-size:12.5px;color:#8a857c;font-style:italic;margin:0 0 8px">${esc(q.legalBasis||'')}</p>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="mono" style="color:#8a857c">€</span>
+        <input type="number" step="0.01" class="answer mono" data-id="${esc(q.id)}" value="${q.preAnswer==null?'':q.preAnswer}" style="width:160px;padding:9px 12px;border-radius:9px;border:1px solid #ddd9d2;background:#f6f5f2;font-size:13px;color:#14161a">
+        ${q.preAnswer!=null?'<span style="font-size:12px;color:#a8a49c">(pre-filled from ETB — confirm)</span>':''}
+      </div>
+    </div>`).join('');
+  $('interview').addEventListener('input',invalidate);
+}
+function collectInputs(){
+  const rules=[], excluded=[];
+  for(const tr of document.querySelectorAll('#mapBody tr')){
+    const code=tr.dataset.code;
+    if(tr.querySelector('.excl').checked){ excluded.push(code); continue; }
+    rules.push({ ledgerCode:code, cfrCode:Number(tr.querySelector('.cfr').value), sheet:tr.querySelector('.sheet').value });
+  }
+  const answers={};
+  for(const inp of document.querySelectorAll('.answer')) answers[inp.dataset.id]=Number(inp.value||0);
+  return { rules, excluded, answers };
+}
+function invalidate(){
+  if(COMPUTED){
+    COMPUTED=false;
+    $('compPanel').innerHTML='<div class="callout c-warn">Inputs changed — prepare the tax computation again before generating.</div>';
+    $('reviewWrap').style.display='none'; $('reviewPanel').innerHTML='';
+  }
+  refreshGate();
+}
+function refreshGate(){
+  let ok=true;
+  for(const tr of document.querySelectorAll('#mapBody tr')){
+    const valid=tr.querySelector('.excl').checked || tr.querySelector('.cfr').value.trim()!=='';
+    tr.style.opacity=valid?'1':'0.55';
+    if(!valid) ok=false;
+  }
+  const priorErr=(PRIOR_REVIEW&&PRIOR_REVIEW.findings||[]).some(f=>f.severity==='error');
+  if(priorErr){ const a=$('priorAck'); if(!a||!a.checked) ok=false; }
+  $('prepareBtn').disabled=!ok;
+  $('reviewBtn').disabled=!ok||!COMPUTED;
+  $('generateBtn').disabled=!ok||!COMPUTED;
+}
+
+// ---- PREPARE COMPUTATION ----
+$('prepareBtn').addEventListener('click', async ()=>{
+  if($('prepareBtn').disabled) return;
+  let res,data;
+  try{ res=await fetch(`/api/session/${SESSION}/computation`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collectInputs())}); data=await res.json(); }
+  catch(err){ data={error:String(err)}; res={ok:false}; }
+  if(!res.ok){ $('compPanel').innerHTML=`<div class="callout c-err">${esc(data.error||'Could not prepare computation.')}</div>`; return; }
+  const c=data.computation;
+  const row=(l,a,strong)=>`<tr${strong?' style="border-top:1px solid #e7e5e0"':''}><td style="padding:9px 0;color:${strong?'#14161a':'#3a3d40'};${strong?'font-weight:600':''}">${esc(l)}</td><td class="mono" style="padding:9px 0;text-align:right;${strong?'font-weight:600':''}">${eur(a)}</td></tr>`;
+  let body=row('Net profit/(loss) before tax per financial statements',c.netProfitPerAccounts);
+  c.addBacks.forEach(x=>body+=`<tr><td style="padding:9px 0;color:#3a3d40;padding-left:16px">Add: ${esc(x.label)}</td><td class="mono" style="padding:9px 0;text-align:right">${eur(x.amount)}</td></tr>`);
+  if(c.addBacks.length) body+=row('Total add-backs',c.totalAddBacks,true);
+  c.deductions.forEach(x=>body+=`<tr><td style="padding:9px 0;color:#3a3d40;padding-left:16px">Less: ${esc(x.label)}</td><td class="mono" style="padding:9px 0;text-align:right">(${eur(x.amount)})</td></tr>`);
+  body+=row('Adjusted profit/(loss) before capital allowances',c.adjustedProfit,true);
+  if(c.capitalAllowances){ body+=`<tr><td style="padding:9px 0;color:#3a3d40">Less: capital allowances</td><td class="mono" style="padding:9px 0;text-align:right">(${eur(c.capitalAllowances)})</td></tr>`+row('Income/(loss) after capital allowances',c.incomeAfterCapitalAllowances,true); }
+  if(c.lossesBroughtForward){ body+=`<tr><td style="padding:9px 0;color:#3a3d40">Losses brought forward (memo)</td><td class="mono" style="padding:9px 0;text-align:right">${eur(c.lossesBroughtForward)}</td></tr><tr><td style="padding:9px 0;color:#3a3d40">Less: losses utilised this year</td><td class="mono" style="padding:9px 0;text-align:right">(${eur(c.lossesUtilised)})</td></tr><tr><td style="padding:9px 0;color:#3a3d40">Losses carried forward (memo)</td><td class="mono" style="padding:9px 0;text-align:right">${eur(c.lossesCarriedForward)}</td></tr>`; }
+  body+=row('Chargeable income',c.chargeableIncome,true);
+  body+=`<tr style="border-top:2px solid #14161a"><td style="padding:12px 0;font-family:var(--font-heading);font-size:16px">Tax charge @ 35%</td><td class="mono" style="padding:12px 0;text-align:right;font-size:16px;color:#494fdf;font-weight:600">${eur(c.taxCharge)}</td></tr>`;
+  const notes=(c.notes||[]).map(n=>`<div class="callout c-warn">${esc(n)}</div>`).join('');
+  $('compPanel').innerHTML=`<table style="width:100%;font-size:14px;border-collapse:collapse;margin-top:8px"><tbody>${body}</tbody></table>${notes}<div class="callout c-ok">✓ Computation prepared — review the figures above, then generate the return.</div>`;
+  COMPUTED=true; $('reviewWrap').style.display=''; $('reviewPanel').innerHTML=''; refreshGate();
+});
+
+// ---- REASONABLENESS REVIEW ----
+$('reviewBtn').addEventListener('click', async ()=>{
+  if($('reviewBtn').disabled) return;
+  const panel=$('reviewPanel'); $('reviewBtn').disabled=true; panel.innerHTML='<div style="font-size:13px;color:#8a857c;margin-top:10px">Reviewing…</div>';
+  let res,data;
+  try{ res=await fetch(`/api/session/${SESSION}/review`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collectInputs())}); data=await res.json(); }
+  catch(err){ data={error:String(err)}; res={ok:false}; }
+  refreshGate();
+  if(!res.ok){ panel.innerHTML=`<div class="callout c-err">${esc(data.error||'Review failed.')}</div>`; return; }
+  const r=data.review;
+  if(!r.available){ panel.innerHTML=`<div class="callout c-warn">${esc(r.note||'AI review unavailable.')}</div>`; return; }
+  if(!r.findings.length){ panel.innerHTML='<div class="callout c-ok">Reasonableness review: no concerns flagged. Review remains your responsibility.</div>'; return; }
+  const rows=r.findings.map(f=>`<div style="display:flex;gap:9px;font-size:13.5px;color:#3a3d40;line-height:1.5;margin-top:8px"><span style="color:${f.severity==='warning'?'#b06a1a':'#2aa06a'}">${f.severity==='warning'?'⚠':'ℹ'}</span>${esc(f.message)}</div>`).join('');
+  panel.innerHTML=`<div style="border-radius:10px;padding:14px 16px;margin-top:12px;background:#faf9f7;border:1px solid #e7e5e0"><div class="mono" style="font-size:11px;color:#8a857c;letter-spacing:0.06em;margin-bottom:4px">REASONABLENESS_REVIEW · ADVISORY · NO FIGURES CHANGED</div>${rows}</div>`;
+});
+
+// ---- GENERATE ----
+$('generateBtn').addEventListener('click', async ()=>{
+  if($('generateBtn').disabled) return;
+  const ack=$('priorAck');
+  let res,data;
+  try{
+    res=await fetch(`/api/session/${SESSION}/generate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      ...collectInputs(), clientName:$('clientName').value, yearOfAssessment:$('ya').value, priorReviewAcknowledged:!!(ack&&ack.checked)
+    })}); data=await res.json();
+  }catch(err){ data={error:String(err)}; res={ok:false}; }
+  if(!res.ok){ $('genMsgs').innerHTML=`<div class="callout c-err">${esc(data.error||'Generation failed.')}</div>`; return; }
+  let m='';
+  if(data.unmatched&&data.unmatched.length) m+=`<div class="callout c-warn">Codes with no row in this template (NOT written — enter manually): ${data.unmatched.map(u=>`${u.sheet}/${u.cfrCode}`).join(', ')}</div>`;
+  if(data.tie&&!data.tie.ok) m+=data.tie.issues.map(i=>`<div class="callout c-warn">${esc(i)}</div>`).join('');
+  $('genMsgs').innerHTML=m;
+  $('dlReturn').href=`/api/session/${SESSION}/return.xlsx`;
+  $('dlSummary').href=`/api/session/${SESSION}/summary.html`;
+  setStep(3);
+});
+
+$('backBtn').addEventListener('click',()=>setStep(1));
+$('restartBtn').addEventListener('click',()=>location.reload());
+</script>
+</body>
+</html>

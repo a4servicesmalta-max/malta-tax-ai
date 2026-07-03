@@ -259,7 +259,9 @@ export function createApp() {
     res.type('html').send(out.summary);
   });
 
-  app.use(express.static(path.join(__dirname, '..', 'public')));
+  // `extensions: ['html']` lets /login, /dashboard, /new-return resolve to the
+  // corresponding .html files; / serves index.html (the marketing homepage).
+  app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));
 
   // Multer throws (oversized upload > 60MB, unexpected field, etc.) from the
   // upload.fields middleware BEFORE any route try/catch runs. Without this
