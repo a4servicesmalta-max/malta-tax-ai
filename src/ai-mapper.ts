@@ -65,10 +65,26 @@ export async function proposeMappingAI(
       opts
     );
     const text = res.content.find((c) => c.type === 'text')?.text ?? '';
-    // Models sometimes wrap the JSON in fences or add prose around it — parse
-    // the outermost {...} slice, not the raw text.
-    const parsed = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
-    if (!Array.isArray(parsed.rules)) return fallback();
+    // Long real-world responses are occasionally imperfect JSON (prose wrapper,
+    // truncation, a malformed element mid-array). Each rule is a flat object,
+    // so salvage them individually instead of all-or-nothing parsing.
+    let ruleObjs: unknown[];
+    try {
+      const parsed = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
+      ruleObjs = Array.isArray(parsed.rules) ? parsed.rules : [];
+    } catch {
+      ruleObjs = [...text.matchAll(/\{[^{}]*"ledgerCode"[^{}]*\}/g)].flatMap((m) => {
+        try {
+          return [JSON.parse(m[0])];
+        } catch {
+          return [];
+        }
+      });
+      console.warn(`[ai-mapper] JSON imperfect — salvaged ${ruleObjs.length} rule objects`);
+    }
+    if (!ruleObjs.length) return fallback();
+    // Safe: the filter below validates every field of every rule.
+    const parsed = { rules: ruleObjs as ProposedRule[] };
     const knownLedgerCodes = new Set(accounts.map((a) => a.accountCode));
     const rules: ProposedRule[] = parsed.rules.filter(
       (r: ProposedRule) =>

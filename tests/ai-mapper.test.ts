@@ -53,6 +53,21 @@ describe('ai-mapper', () => {
     expect(res.rules[0].cfrCode).toBe(2150);
   });
 
+  it('salvages valid rule objects from imperfect JSON (truncated array)', async () => {
+    const fake = vi.fn().mockResolvedValue({
+      content: [
+        {
+          type: 'text',
+          text:
+            '{"rules":[{"ledgerCode":"1200","cfrCode":2150,"sheet":"B_Sheet","confidence":0.9},{"ledgerCode":"1200","cfrCode":216', // truncated mid-object
+        },
+      ],
+    });
+    const res = await proposeMappingAI(ETB, {}, { apiKey: 'test', createMessage: fake });
+    expect(res.source).toBe('ai');
+    expect(res.rules).toEqual([{ ledgerCode: '1200', cfrCode: 2150, sheet: 'B_Sheet', confidence: 0.9 }]);
+  });
+
   it('falls back to heuristics when the model returns malformed JSON', async () => {
     const fake = vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'not json' }] });
     const res = await proposeMappingAI(ETB, {}, { apiKey: 'test', createMessage: fake });
