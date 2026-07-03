@@ -80,7 +80,9 @@ export async function reasonablenessReview(
     const res = await callAnthropic(
       {
         model: opts.model ?? process.env.ANTHROPIC_MODEL ?? 'claude-fable-5',
-        max_tokens: 1500,
+        // Real ETBs yield long finding lists; a truncated response fails JSON
+        // parsing and loses the whole review.
+        max_tokens: 4000,
         system: SYSTEM,
         messages: [
           {

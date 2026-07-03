@@ -49,7 +49,9 @@ export async function proposeMappingAI(
     const res = await callAnthropic(
       {
         model: opts.model ?? process.env.ANTHROPIC_MODEL ?? 'claude-fable-5',
-        max_tokens: 2000,
+        // Sized for real ETBs (~100 accounts × one JSON rule each); a too-small
+        // budget truncates the JSON mid-list and the whole proposal is lost.
+        max_tokens: 8000,
         system: SYSTEM,
         messages: [
           {
