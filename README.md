@@ -13,11 +13,23 @@ computation summary showing the workings.
 comes from the ETB (as parsed) or from an interview answer the preparer has
 explicitly confirmed. Tax itself is computed by the official CfR workbook's
 own formulas — this tool only writes input values into the template and sets
-it to recalculate on open (`fullCalcOnLoad`). AI, when configured, is used
-for exactly one thing: *proposing* which ledger account maps to which CfR
-code — a suggestion the preparer reviews, edits, and confirms line by line.
-Absent an API key, the same proposal step runs on a deterministic heuristic
-table instead, with no loss of functionality.
+it to recalculate on open (`fullCalcOnLoad`). AI, when configured, is used for
+exactly two things, both advisory and both figure-free: (1) *proposing* which
+ledger account maps to which CfR code — a suggestion the preparer reviews and
+confirms line by line; and (2) a *reasonableness review* of the draft
+computation that raises prose review points (e.g. "depreciation charged but
+not added back") for a human to judge — it never writes or proposes a number,
+and never blocks generation. Absent an API key, mapping falls back to a
+deterministic heuristic table and the review reports "unavailable" — no loss
+of the core workflow.
+
+## Configuration
+
+The tool runs with **no configuration**. To enable the AI mapping proposal and
+reasonableness review, copy `.env.example` to `.env` (gitignored) and set
+`ANTHROPIC_API_KEY` (the account needs a positive credit balance). `npm start`
+and `npm run dev` load `.env` automatically if present. Never paste a key onto
+a command line or into any committed file.
 
 ## Quickstart
 
