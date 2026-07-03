@@ -110,7 +110,10 @@ export async function reasonablenessReview(
       .slice(0, 25)
       .map((f: ReviewFinding) => ({ severity: f.severity, message: f.message.trim().slice(0, 500) }));
     return { available: true, findings };
-  } catch {
+  } catch (e) {
+    // Diagnosable in server logs (status/message only — never the credential).
+    const err = e as { status?: number; message?: string };
+    console.warn(`[ai-review] failed: status=${err?.status ?? '?'} ${String(err?.message ?? '').slice(0, 160)}`);
     return {
       available: false,
       findings: [],

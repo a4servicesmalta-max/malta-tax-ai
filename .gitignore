@@ -3,3 +3,5 @@ dist/
 fixtures/
 *.log
 .env
+live-*.mjs
+live-e2e-*.xlsx

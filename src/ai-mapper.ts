@@ -81,7 +81,9 @@ export async function proposeMappingAI(
         r.confidence <= 1
     );
     return rules.length ? { rules, source: 'ai' } : fallback();
-  } catch {
+  } catch (e) {
+    const err = e as { status?: number; message?: string };
+    console.warn(`[ai-mapper] failed, using heuristic: status=${err?.status ?? '?'} ${String(err?.message ?? '').slice(0, 160)}`);
     return fallback();
   }
 }
