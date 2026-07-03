@@ -63,6 +63,9 @@
   <p class="muted">The tax computation is prepared and reviewed <strong>before</strong> the return is filled. Changing any mapping or answer invalidates it.</p>
   <button id="computeBtn" disabled>Prepare tax computation</button>
   <div id="compPanel"></div>
+  <button id="reviewBtn" disabled>Run reasonableness review (AI)</button>
+  <span class="muted">Advisory second opinion — flags points to check. It never changes figures and is not required to generate.</span>
+  <div id="reviewPanel"></div>
   <button id="generateBtn" disabled>Generate return</button>
   <div id="genMsgs"></div>
 </div>
@@ -134,6 +137,7 @@ function invalidateComputation(){
     COMPUTED = false;
     document.getElementById('compPanel').innerHTML =
       '<div class="warn">Inputs changed — prepare the tax computation again before generating.</div>';
+    document.getElementById('reviewPanel').innerHTML = '';
   }
   refreshGate();
 }
@@ -179,6 +183,24 @@ document.getElementById('computeBtn').addEventListener('click', async ()=>{
   refreshGate();
 });
 
+document.getElementById('reviewBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('reviewBtn');
+  const panel = document.getElementById('reviewPanel');
+  btn.disabled = true; panel.innerHTML = '<div class="muted">Reviewing…</div>';
+  const res = await fetch(`/api/session/${SESSION}/review`, {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(collectInputs())
+  });
+  const data = await res.json();
+  refreshGate();
+  if(!res.ok){ panel.innerHTML = `<div class="warn">${esc(data.error)}</div>`; return; }
+  const r = data.review;
+  if(!r.available){ panel.innerHTML = `<div class="warn">${esc(r.note||'AI review unavailable.')}</div>`; return; }
+  if(!r.findings.length){ panel.innerHTML = '<div class="ok">Reasonableness review: no concerns flagged. Review remains your responsibility.</div>'; return; }
+  panel.innerHTML = `<div class="priorReview hasErrors"><strong>Reasonableness review (AI — advisory, no figures changed)</strong>`
+    + r.findings.map(f=>`<div class="finding ${f.severity==='warning'?'error':'warning'}">${f.severity==='warning'?'⚠':'ℹ'} ${esc(f.message)}</div>`).join('')
+    + `</div>`;
+});
+
 function renderPriorReviewPanel(){
   const panel = document.getElementById('priorReviewPanel');
   if(!PRIOR_REVIEW){ panel.innerHTML = ''; return; }
@@ -219,6 +241,8 @@ function refreshGate(){
     if(!ack || !ack.checked) allOk = false;
   }
   document.getElementById('computeBtn').disabled = !allOk;
+  // The optional AI reasonableness review needs a prepared computation.
+  document.getElementById('reviewBtn').disabled = !allOk || !COMPUTED;
   // The return can only be generated AFTER the tax computation has been
   // prepared and reviewed for the current inputs.
   document.getElementById('generateBtn').disabled = !allOk || !COMPUTED;

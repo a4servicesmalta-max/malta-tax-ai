@@ -25,7 +25,7 @@ export interface AiProposal {
  * characters, tabs and newlines to single spaces so a hostile name cannot
  * inject fake columns/rows (or model instructions) into the prompt.
  */
-function sanitizeName(name: string): string {
+export function sanitizeName(name: string): string {
   // eslint-disable-next-line no-control-regex
   return name.replace(/[\x00-\x1F\x7F]+/g, ' ').trim();
 }

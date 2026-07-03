@@ -86,6 +86,17 @@ async function main() {
   check('computation: chargeable income 6000', comp?.chargeableIncome === 6000);
   check('computation: tax charge 2100 (35%)', comp?.taxCharge === 2100);
 
+  // 2a-ii. Advisory reasonableness review — must return 200 and, with no API key,
+  // report unavailable without ever blocking the flow.
+  const revRes = await fetch(`${BASE}/api/session/${s.sessionId}/review`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rules: genBody.rules, answers: {}, excluded: [] }),
+  });
+  const rev = (await revRes.json()).review;
+  check('reasonableness review served (200)', revRes.status === 200);
+  check('review is advisory and non-blocking (available flag present)', typeof rev?.available === 'boolean');
+
   // 2b. Generate WITHOUT acknowledgment -> blocked 400 mentioning prior-year return review.
   const blocked = await fetch(`${BASE}/api/session/${s.sessionId}/generate`, {
     method: 'POST',

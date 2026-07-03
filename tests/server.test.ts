@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import JSZip from 'jszip';
 import { createApp } from '../src/server';
@@ -72,6 +72,34 @@ describe('server', () => {
     expect(c.lossesUtilised).toBe(500);
     expect(c.chargeableIncome).toBe(82500);
     expect(c.taxCharge).toBe(28875);
+  });
+
+  it('serves an advisory reasonableness review (unavailable without an API key, never blocks)', async () => {
+    const app = createApp();
+    const { etb, template } = await fixtures();
+    const s = await request(app)
+      .post('/api/session')
+      .attach('etb', etb, 'etb.xlsx')
+      .attach('template', template, 'template.xlsx');
+    vi.stubEnv('ANTHROPIC_API_KEY', ''); // deterministic: exercise the unconfigured path
+    try {
+      const res = await request(app)
+        .post(`/api/session/${s.body.sessionId}/review`)
+        .send({
+          rules: [
+            { ledgerCode: '1200', cfrCode: 2150, sheet: 'B_Sheet' },
+            { ledgerCode: '4000', cfrCode: 5000, sheet: 'Income' },
+          ],
+          answers: {},
+          excluded: [],
+        });
+      expect(res.status).toBe(200);
+      expect(res.body.review.available).toBe(false);
+      expect(res.body.review.findings).toEqual([]);
+      expect(res.body.review.note).toMatch(/not configured/i);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('refuses to serve a computation while accounts are unmapped', async () => {

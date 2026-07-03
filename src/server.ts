@@ -21,6 +21,7 @@ import { proposeMappingAI } from './ai-mapper';
 import { applyMapping, netProfitFromMapping } from './mapping';
 import { buildInterview, fillsFromAnswers } from './interview';
 import { computeTax } from './tax-computation';
+import { reasonablenessReview } from './reasonableness-review';
 import { fillCfrReturn } from './template-writer';
 import { renderComputationSummary } from './computation-summary';
 import { ANCHORS } from './template-map';
@@ -127,6 +128,32 @@ export function createApp() {
         });
       }
       res.json({ computation: computeTax(netProfitFromMapping(fill), answers ?? {}) });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+    }
+  });
+
+  // Advisory AI reasonableness review of the draft computation (same inputs as
+  // /computation). Never writes figures, never gates generation; env-gated —
+  // returns available:false when no API key is configured.
+  app.post('/api/session/:id/review', async (req, res) => {
+    const session = sessions.get(req.params.id);
+    if (!session) return res.status(404).json({ error: 'session not found' });
+    try {
+      const { rules, answers, excluded } = req.body as {
+        rules: MappingRule[];
+        answers: Record<string, number>;
+        excluded: string[];
+      };
+      const included = session.accounts.filter((a) => !(excluded ?? []).includes(a.accountCode));
+      const fill = applyMapping(included, { rules: rules ?? [] });
+      if (fill.unmappedAccounts.length) {
+        return res.status(400).json({
+          error: `unmapped accounts remain: ${fill.unmappedAccounts.map((u) => u.code).join(', ')} — map or exclude each one`,
+        });
+      }
+      const computation = computeTax(netProfitFromMapping(fill), answers ?? {});
+      res.json({ review: await reasonablenessReview(included, computation) });
     } catch (e) {
       res.status(400).json({ error: (e as Error).message });
     }
