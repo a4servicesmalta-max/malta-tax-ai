@@ -22,6 +22,7 @@ import { applyMapping, netProfitFromMapping } from './mapping';
 import { buildInterview, fillsFromAnswers } from './interview';
 import { computeTax } from './tax-computation';
 import { reasonablenessReview } from './reasonableness-review';
+import { notifyAdmin } from './email';
 import { fillCfrReturn } from './template-writer';
 import { renderComputationSummary } from './computation-summary';
 import { ANCHORS } from './template-map';
@@ -39,8 +40,46 @@ interface Session {
 
 export function createApp() {
   const app = express();
+  app.set('trust proxy', 1); // behind Render/Railway proxy: real client IP + protocol
   app.use(express.json({ limit: '5mb' }));
-  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 60 * 1024 * 1024 } });
+
+  // Security headers (parity with FS AI Review). CSP allows our inline styles/
+  // scripts and the web-font hosts; everything else is same-origin.
+  app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader(
+      'Content-Security-Policy',
+      [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline'",
+        "style-src 'self' 'unsafe-inline' https://db.onlinewebfonts.com https://fonts.googleapis.com",
+        "font-src 'self' https://db.onlinewebfonts.com https://fonts.gstatic.com",
+        "img-src 'self' data: blob:",
+        "media-src 'self'",
+        "connect-src 'self'",
+        "frame-ancestors 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+      ].join('; ')
+    );
+    if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+    next();
+  });
+
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 60 * 1024 * 1024 },
+    // Only spreadsheet inputs are ever expected — reject anything else early.
+    fileFilter: (_req, file, cb) => {
+      if (/\.(xlsx|xls|xlsm)$/i.test(file.originalname)) return cb(null, true);
+      cb(new Error(`Unsupported file type "${file.originalname}" — upload .xlsx, .xls or .xlsm`));
+    },
+  });
   const sessions = new Map<string, Session>();
 
   // ---- Shared-credential auth gate ----
@@ -76,8 +115,23 @@ export function createApp() {
   };
   const PROTECTED_PAGES = new Set(['/new-return', '/new-return.html', '/dashboard', '/dashboard.html']);
 
+  // Per-IP sliding-window rate limit (parity with FS AI Review) — throttles
+  // brute-force against the login. Memory-bounded.
+  const loginHits = new Map<string, number[]>();
+  const rateLimited = (ip: string, limit = 10, windowMs = 300_000): boolean => {
+    const now = Date.now();
+    const hits = (loginHits.get(ip) || []).filter((t) => now - t < windowMs);
+    hits.push(now);
+    loginHits.set(ip, hits);
+    if (loginHits.size > 5000) loginHits.clear();
+    return hits.length > limit;
+  };
+
   app.post('/api/login', (req, res) => {
     if (!AUTH_ENABLED) return res.json({ ok: true });
+    if (rateLimited(req.ip || 'unknown')) {
+      return res.status(429).json({ error: 'Too many attempts — try again in a few minutes.' });
+    }
     const { user, password } = (req.body || {}) as { user?: string; password?: string };
     const ok =
       typeof user === 'string' &&
@@ -85,9 +139,10 @@ export function createApp() {
       eqConst(user, AUTH_USER) &&
       eqConst(password, AUTH_PASS);
     if (!ok) return res.status(401).json({ error: 'Invalid username or password.' });
+    const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
     res.setHeader(
       'Set-Cookie',
-      `mt_auth=${makeToken()}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${12 * 3600}`
+      `mt_auth=${makeToken()}; HttpOnly;${secure ? ' Secure;' : ''} SameSite=Lax; Path=/; Max-Age=${12 * 3600}`
     );
     res.json({ ok: true });
   });
@@ -303,6 +358,11 @@ export function createApp() {
       });
 
       session.output = { xlsx: buffer, summary };
+      // Best-effort admin notification (no-op unless SMTP is configured).
+      void notifyAdmin(
+        'Malta Tax AI — return generated',
+        `A tax return was generated on tax.vacei.com:\n\n  Client: ${clientName || '(unnamed)'}\n  Year of assessment: ${yearOfAssessment || '(unspecified)'}\n  Net profit per accounts: ${netProfit.toFixed(2)}`
+      );
       res.json({ downloadReady: true, unmatched, tie: tie ?? null });
     } catch (e) {
       res.status(400).json({ error: (e as Error).message });
