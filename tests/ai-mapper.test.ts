@@ -36,6 +36,23 @@ describe('ai-mapper', () => {
     expect(res.rules[0]).toMatchObject({ ledgerCode: '1200', cfrCode: 2150 });
   });
 
+  it('parses JSON wrapped in fences and surrounded by prose', async () => {
+    const fake = vi.fn().mockResolvedValue({
+      content: [
+        {
+          type: 'text',
+          text:
+            'Here is the mapping:\n```json\n' +
+            JSON.stringify({ rules: [{ ledgerCode: '1200', cfrCode: 2150, sheet: 'B_Sheet', confidence: 0.9 }] }) +
+            '\n```\nLet me know if you need anything else.',
+        },
+      ],
+    });
+    const res = await proposeMappingAI(ETB, {}, { apiKey: 'test', createMessage: fake });
+    expect(res.source).toBe('ai');
+    expect(res.rules[0].cfrCode).toBe(2150);
+  });
+
   it('falls back to heuristics when the model returns malformed JSON', async () => {
     const fake = vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'not json' }] });
     const res = await proposeMappingAI(ETB, {}, { apiKey: 'test', createMessage: fake });

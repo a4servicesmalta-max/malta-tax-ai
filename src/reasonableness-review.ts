@@ -99,7 +99,9 @@ export async function reasonablenessReview(
       opts
     );
     const text = res.content.find((c) => c.type === 'text')?.text ?? '';
-    const parsed = JSON.parse(text.replace(/^```json?\s*|\s*```$/g, ''));
+    // Models sometimes wrap the JSON in fences or add prose around it — parse
+    // the outermost {...} slice, not the raw text.
+    const parsed = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
     if (!Array.isArray(parsed.findings)) return { available: true, findings: [] };
     const findings: ReviewFinding[] = parsed.findings
       .filter(
