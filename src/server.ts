@@ -43,6 +43,71 @@ export function createApp() {
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 60 * 1024 * 1024 } });
   const sessions = new Map<string, Session>();
 
+  // ---- Shared-credential auth gate ----
+  // Active only when APP_PASSWORD is set (so local dev + tests run open). Protects
+  // the app pages and every tax API route with an HMAC-signed, httpOnly cookie.
+  const AUTH_USER = process.env.APP_USER || 'admin';
+  const AUTH_PASS = process.env.APP_PASSWORD || '';
+  const AUTH_ENABLED = AUTH_PASS.length > 0;
+  const AUTH_SECRET = process.env.SESSION_SECRET || `${AUTH_USER}:${AUTH_PASS}`;
+  const signExp = (v: string) => crypto.createHmac('sha256', AUTH_SECRET).update(v).digest('hex');
+  const makeToken = () => {
+    const exp = String(Date.now() + 12 * 3600 * 1000);
+    return `${exp}.${signExp(exp)}`;
+  };
+  const tokenValid = (t: string | undefined): boolean => {
+    if (!t) return false;
+    const i = t.indexOf('.');
+    if (i < 0) return false;
+    const exp = t.slice(0, i);
+    const mac = t.slice(i + 1);
+    if (!/^\d+$/.test(exp) || Number(exp) < Date.now()) return false;
+    const good = signExp(exp);
+    return good.length === mac.length && crypto.timingSafeEqual(Buffer.from(good), Buffer.from(mac));
+  };
+  const isAuthed = (req: express.Request): boolean => {
+    const m = (req.headers.cookie || '').match(/(?:^|;\s*)mt_auth=([^;]+)/);
+    return m ? tokenValid(decodeURIComponent(m[1])) : false;
+  };
+  const eqConst = (a: string, b: string): boolean => {
+    const ab = Buffer.from(a);
+    const bb = Buffer.from(b);
+    return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
+  };
+  const PROTECTED_PAGES = new Set(['/new-return', '/new-return.html', '/dashboard', '/dashboard.html']);
+
+  app.post('/api/login', (req, res) => {
+    if (!AUTH_ENABLED) return res.json({ ok: true });
+    const { user, password } = (req.body || {}) as { user?: string; password?: string };
+    const ok =
+      typeof user === 'string' &&
+      typeof password === 'string' &&
+      eqConst(user, AUTH_USER) &&
+      eqConst(password, AUTH_PASS);
+    if (!ok) return res.status(401).json({ error: 'Invalid username or password.' });
+    res.setHeader(
+      'Set-Cookie',
+      `mt_auth=${makeToken()}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${12 * 3600}`
+    );
+    res.json({ ok: true });
+  });
+  app.post('/api/logout', (_req, res) => {
+    res.setHeader('Set-Cookie', 'mt_auth=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0');
+    res.json({ ok: true });
+  });
+
+  if (AUTH_ENABLED) {
+    app.use((req, res, next) => {
+      const p = req.path;
+      const isApi = p.startsWith('/api/');
+      const isAuthApi = p === '/api/login' || p === '/api/logout';
+      const needsAuth = PROTECTED_PAGES.has(p) || (isApi && !isAuthApi);
+      if (!needsAuth || isAuthed(req)) return next();
+      if (isApi) return res.status(401).json({ error: 'not authenticated' });
+      return res.redirect('/login');
+    });
+  }
+
   app.post(
     '/api/session',
     upload.fields([
