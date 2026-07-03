@@ -1104,9 +1104,84 @@ git commit -m "feat: FS tie-check (net profit + total assets vs mapped ETB)"
 
 ---
 
-### Task 8: Prior-return intake + prior-year cross-check
+### Task 8: Prior-return intake + review gate + prior-year cross-check
 
-Two deterministic capabilities: (1) read the prior return's code set/values (feeds mapping bias + interview pre-answers); (2) cross-check — mapping the ETB's PY balances with the proposed profile should reproduce the prior return's filed values; mismatches indicate wrong mapping and are surfaced per code.
+Three deterministic capabilities: (1) read the prior return's code set/values (feeds mapping bias + interview pre-answers); (2) **review the prior return for errors BEFORE it is used as a basis** (user requirement): `reviewPriorReturn(buffer)` returns findings — balance-sheet code sums that don't balance (|assets(1xxx/2xxx) + equity&liabilities(3xxx)| > €1 in the Dr+/Cr− convention), income codes summing to a net profit that contradicts the return's own p3!E6 value when readable, and no-value code rows; findings are surfaced to the preparer who must acknowledge before generation (server/UI tasks enforce this); (3) cross-check — mapping the ETB's PY balances with the proposed profile should reproduce the prior return's filed values; mismatches indicate wrong mapping (or a prior-return error) and are surfaced per code.
+
+Additional test to include (same test file):
+
+```ts
+it('reviewPriorReturn flags a non-balancing balance sheet and echoes continuity values', async () => {
+  const prior = await syntheticCfrWorkbook({
+    bSheet: [
+      { row: 10, code: 2150, value: 4000 }, // asset Dr
+      { row: 12, code: 3801, value: -3000 }, // equity Cr — doesn't offset 4000
+    ],
+    income: [{ row: 5, code: 5000, value: -70000 }],
+  });
+  const review = await reviewPriorReturn(prior);
+  expect(review.findings.some((f) => /balance sheet.*does not balance/i.test(f.message))).toBe(true);
+  expect(review.findings[0].severity).toBe('error');
+});
+
+it('reviewPriorReturn passes a clean return', async () => {
+  const prior = await syntheticCfrWorkbook({
+    bSheet: [
+      { row: 10, code: 2150, value: 4000 },
+      { row: 12, code: 3801, value: -4000 },
+    ],
+    income: [{ row: 5, code: 5000, value: -70000 }],
+  });
+  const review = await reviewPriorReturn(prior);
+  expect(review.findings.filter((f) => f.severity === 'error')).toEqual([]);
+});
+```
+
+Implementation addition to `src/prior-return.ts`:
+
+```ts
+export interface PriorReviewFinding {
+  severity: 'error' | 'warning';
+  message: string;
+}
+
+export interface PriorReturnReview {
+  findings: PriorReviewFinding[];
+  /** Sum of B_Sheet code values (should be ~0 in Dr+/Cr− convention). */
+  balanceSheetNet: number;
+  /** −(sum of Income code values) = net profit implied by the filed return. */
+  impliedNetProfit: number;
+}
+
+/**
+ * Deterministic error review of a filed prior-year return. Run BEFORE any
+ * working is based on it; findings must be acknowledged by the preparer.
+ */
+export async function reviewPriorReturn(buffer: Buffer): Promise<PriorReturnReview> {
+  const values = await readCfrValues(buffer, CODE_SHEETS);
+  const findings: PriorReviewFinding[] = [];
+  const bs = values.filter((v) => v.sheet === 'B_Sheet' && v.value !== null);
+  const inc = values.filter((v) => v.sheet === 'Income' && v.value !== null);
+  const balanceSheetNet = Math.round(bs.reduce((a, v) => a + (v.value as number), 0) * 100) / 100;
+  const impliedNetProfit = Math.round(-inc.reduce((a, v) => a + (v.value as number), 0) * 100) / 100;
+  if (Math.abs(balanceSheetNet) > 1) {
+    findings.push({
+      severity: 'error',
+      message: `Prior-year return balance sheet does not balance: code values net to €${balanceSheetNet.toFixed(2)} (expected 0). Review the prior return before relying on it.`,
+    });
+  }
+  if (bs.length === 0 && inc.length === 0) {
+    findings.push({ severity: 'error', message: 'No code values could be read from the prior-year return — unsupported or empty template.' });
+  }
+  const noValue = values.filter((v) => v.value === null).length;
+  if (noValue > 0 && bs.length + inc.length > 0) {
+    findings.push({ severity: 'warning', message: `${noValue} code rows on the prior return carry no value — verify these were intentionally blank.` });
+  }
+  return { findings, balanceSheetNet, impliedNetProfit };
+}
+```
+
+(Test file must import `reviewPriorReturn` alongside the existing imports.)
 
 **Files:**
 - Create: `src/prior-return.ts`, `src/template-map.ts`
@@ -1844,8 +1919,44 @@ git commit -m "feat: template survey script to discover anchors on real CfR work
 - Test: `tests/server.test.ts`
 
 Endpoints:
-- `POST /api/session` — multipart fields `etb` (required), `fs` (optional), `template` (required), `prior` (optional). Parses everything, runs proposal + interview build, returns `{ sessionId, accounts, proposal, interview, warnings, tie, crossCheck }`.
-- `POST /api/session/:id/generate` — JSON body `{ rules: MappingRule[], answers: Record<string, number>, clientName, yearOfAssessment }`. Blocks (400) if any ETB account is neither mapped nor in `excludedCodes`; otherwise fills the template, builds the summary, returns `{ downloadReady: true, unmatched }`.
+- `POST /api/session` — multipart fields `etb` (required), `fs` (optional), `template` (required), `prior` (optional). Parses everything, runs **`reviewPriorReturn` on the prior return when uploaded (review-first gate)**, proposal + interview build, returns `{ sessionId, accounts, proposal, interview, warnings, tie, crossCheck, priorReview }`.
+- `POST /api/session/:id/generate` — JSON body `{ rules: MappingRule[], answers: Record<string, number>, clientName, yearOfAssessment, excluded, priorReviewAcknowledged?: boolean }`. Blocks (400) if any ETB account is neither mapped nor excluded. **Also blocks (400, error mentioning "prior-year return review") when the session's prior-return review produced any `severity: 'error'` finding and the body does not carry `priorReviewAcknowledged: true`** — errors on the prior return must be brought to the preparer's attention and explicitly acknowledged (or the prior return re-uploaded/omitted) before generation. Otherwise fills the template, builds the summary (which lists acknowledged prior-return findings under Warnings), returns `{ downloadReady: true, unmatched }`.
+
+Additional server test to include (same test file; import `reviewPriorReturn` not needed — exercise via HTTP):
+
+```ts
+it('blocks generation until prior-return error findings are acknowledged', async () => {
+  const app = createApp();
+  const { etb, template } = await fixtures();
+  const badPrior = await syntheticCfrWorkbook({
+    bSheet: [
+      { row: 10, code: 2150, value: 4000 },
+      { row: 12, code: 3801, value: -3000 }, // does not balance -> error finding
+    ],
+    income: [],
+  });
+  const s = await request(app)
+    .post('/api/session')
+    .attach('etb', etb, 'etb.xlsx')
+    .attach('template', template, 'template.xlsx')
+    .attach('prior', badPrior, 'prior.xlsx');
+  expect(s.body.priorReview.findings.length).toBeGreaterThan(0);
+  const body = {
+    rules: [
+      { ledgerCode: '1200', cfrCode: 2150, sheet: 'B_Sheet' },
+      { ledgerCode: '4000', cfrCode: 5000, sheet: 'Income' },
+    ],
+    answers: {}, clientName: 'X', yearOfAssessment: 'YA2026', excluded: [],
+  };
+  const blocked = await request(app).post(`/api/session/${s.body.sessionId}/generate`).send(body);
+  expect(blocked.status).toBe(400);
+  expect(blocked.body.error).toMatch(/prior-year return review/i);
+  const ok = await request(app)
+    .post(`/api/session/${s.body.sessionId}/generate`)
+    .send({ ...body, priorReviewAcknowledged: true });
+  expect(ok.status).toBe(200);
+});
+```
 - `GET /api/session/:id/return.xlsx` and `GET /api/session/:id/summary.html` — downloads.
 - Static `public/` at `/`.
 
@@ -2137,7 +2248,7 @@ git commit -m "feat: express app — session upload, gated generate, downloads"
 **Files:**
 - Create: `public/index.html` (single file: minimal CSS + vanilla JS)
 
-- [ ] **Step 1: Implement `public/index.html`** — three visible steps; confidence badges on proposals; every proposal editable; unmapped accounts highlighted red; generate button disabled until all mapped/excluded; interview questions rendered with pre-answers, legal basis in small text; downloads at the end. Complete file:
+- [ ] **Step 1: Implement `public/index.html`** — three visible steps; confidence badges on proposals; every proposal editable; unmapped accounts highlighted red; generate button disabled until all mapped/excluded; interview questions rendered with pre-answers, legal basis in small text; downloads at the end. **Prior-return review gate:** Step 1 labels the prior-year upload as its own titled sub-section ("Prior-year tax return — reviewed before use"); when the session response carries `priorReview` with findings, Step 2 opens with a highlighted "Prior-year return review" panel listing each finding (errors red, warnings amber) and, if any finding is `severity:'error'`, an explicit checkbox — "I have reviewed these prior-year findings and choose to proceed" — which must be ticked before the Generate button enables; the generate request then sends `priorReviewAcknowledged: true`. A clean review shows a green "Prior-year return reviewed — no errors found" note. Complete file (EXTEND the markup/script below accordingly where marked):
 
 ```html
 <!doctype html>

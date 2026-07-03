@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Malta Tax Return Generator</title>
+<style>
+  body{font-family:'Segoe UI',Arial,sans-serif;max-width:1000px;margin:2rem auto;padding:0 1rem;color:#15202b}
+  h1{font-size:1.5rem} .step{border:1px solid #d0d7de;border-radius:8px;padding:1.25rem;margin:1rem 0}
+  .step h2{margin-top:0;font-size:1.1rem} .muted{color:#57606a;font-size:.85rem}
+  table{border-collapse:collapse;width:100%;margin:.75rem 0}
+  td,th{border:1px solid #d0d7de;padding:5px 8px;font-size:.9rem;text-align:left}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .badge{border-radius:10px;padding:1px 8px;font-size:.75rem;color:#fff}
+  .hi{background:#1a7f37}.mid{background:#bf8700}.lo{background:#cf222e}.none{background:#57606a}
+  .unmapped{background:#fff1f0}
+  button{background:#0969da;color:#fff;border:none;border-radius:6px;padding:.5rem 1.1rem;font-size:.95rem;cursor:pointer}
+  button:disabled{background:#8c959f;cursor:not-allowed}
+  input[type=number],input[type=text],select{padding:4px 6px;border:1px solid #d0d7de;border-radius:4px}
+  .warn{background:#fff7e6;border:1px solid #e6b800;border-radius:6px;padding:.6rem .9rem;margin:.5rem 0;font-size:.9rem}
+  .ok{background:#e6ffec;border:1px solid #1a7f37;border-radius:6px;padding:.6rem .9rem;margin:.5rem 0;font-size:.9rem}
+  .legal{font-size:.75rem;color:#57606a;font-style:italic}
+  fieldset{border:1px solid #d0d7de;border-radius:6px;margin:.5rem 0;padding:.5rem .75rem}
+  legend{font-size:.85rem;color:#57606a;padding:0 .3rem}
+  .priorReview{border-radius:6px;padding:.75rem 1rem;margin:.5rem 0}
+  .priorReview.hasErrors{background:#fff1f0;border:1px solid #cf222e}
+  .priorReview.clean{background:#e6ffec;border:1px solid #1a7f37}
+  .finding{padding:.35rem 0;font-size:.9rem}
+  .finding.error{color:#cf222e}
+  .finding.warning{color:#9a6700}
+  .ackRow{margin-top:.6rem;font-size:.9rem}
+</style>
+</head>
+<body>
+<h1>Malta Tax Return Generator</h1>
+<p class="muted">Upload the ETB, FS and blank CfR template. Confirm the mapping and the tax interview. No figure is ever produced by AI — the official template computes the tax.</p>
+
+<div class="step" id="step1">
+  <h2>Step 1 — Upload</h2>
+  <form id="uploadForm">
+    <p>ETB (Excel, required): <input type="file" name="etb" required accept=".xlsx,.xls"></p>
+    <p>Financial statements (Excel, optional): <input type="file" name="fs" accept=".xlsx,.xls"></p>
+    <p>Blank CfR return template (required): <input type="file" name="template" required accept=".xlsx,.xlsm"></p>
+    <fieldset>
+      <legend>Prior-year tax return — reviewed before use</legend>
+      <p class="muted">Optional, improves mapping accuracy. If uploaded, it is deterministically reviewed for errors (balance-sheet ties, missing values) before it is used as a basis for anything — you will be shown the findings in Step 2.</p>
+      <p>Prior-year filed return (optional): <input type="file" name="prior" accept=".xlsx,.xlsm"></p>
+    </fieldset>
+    <p>Client name: <input type="text" id="clientName"> Year of assessment: <input type="text" id="ya" placeholder="YA2026" size="8"></p>
+    <button type="submit">Analyse</button>
+  </form>
+  <div id="uploadMsgs"></div>
+</div>
+
+<div class="step" id="step2" hidden>
+  <h2>Step 2 — Confirm mapping &amp; tax interview</h2>
+  <div id="priorReviewPanel"></div>
+  <div id="crossCheck"></div>
+  <h3>Account mapping <span class="muted" id="proposalSource"></span></h3>
+  <table id="mapTable"><thead><tr><th>Code</th><th>Account</th><th class="num">Balance €</th><th>CfR code</th><th>Sheet</th><th>Confidence</th><th>Exclude</th></tr></thead><tbody></tbody></table>
+  <h3>Tax interview</h3>
+  <div id="interview"></div>
+  <button id="generateBtn" disabled>Generate return</button>
+  <div id="genMsgs"></div>
+</div>
+
+<div class="step" id="step3" hidden>
+  <h2>Step 3 — Download</h2>
+  <p><a id="dlReturn" href="#">⬇ Filled tax return (.xlsx)</a> — open in Excel/LibreOffice; the template recalculates the tax on open.</p>
+  <p><a id="dlSummary" href="#" target="_blank">⬇ Computation summary (workings)</a></p>
+  <div id="finalMsgs"></div>
+</div>
+
+<script>
+let SESSION = null, ACCOUNTS = [], QUESTIONS = [], PRIOR_REVIEW = null;
+
+function badge(c){
+  if(c==null) return '<span class="badge none">unmapped</span>';
+  const cls = c>=.85?'hi':c>=.6?'mid':'lo';
+  return `<span class="badge ${cls}">${Math.round(c*100)}%</span>`;
+}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+
+document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const res = await fetch('/api/session', { method:'POST', body: fd });
+  const data = await res.json();
+  const msgs = document.getElementById('uploadMsgs');
+  if(!res.ok){ msgs.innerHTML = `<div class="warn">${esc(data.error)}</div>`; return; }
+  SESSION = data.sessionId; ACCOUNTS = data.accounts; QUESTIONS = data.interview.questions;
+  PRIOR_REVIEW = data.priorReview || null;
+  msgs.innerHTML = (data.warnings||[]).map(w=>`<div class="warn">${esc(w)}</div>`).join('') ||
+    '<div class="ok">Files parsed successfully.</div>';
+  document.getElementById('proposalSource').textContent =
+    data.proposal.source==='ai' ? '(AI-proposed — confirm each)' : '(heuristic proposal — confirm each)';
+
+  renderPriorReviewPanel();
+
+  if(data.crossCheck){
+    const cc = data.crossCheck;
+    document.getElementById('crossCheck').innerHTML = cc.mismatches.length
+      ? `<div class="warn">Prior-year cross-check: ${cc.mismatches.length} of ${cc.checkedCodes} codes do not reproduce last year's filed figures — review those mappings. ${cc.mismatches.map(m=>`code ${m.cfrCode}: filed €${m.priorReturnValue} vs mapped €${m.mappedPyValue}`).join('; ')}</div>`
+      : `<div class="ok">Prior-year cross-check passed: mapped PY balances reproduce the filed prior return (${cc.checkedCodes} codes).</div>`;
+  }
+  const byCode = Object.fromEntries(data.proposal.rules.map(r=>[r.ledgerCode,r]));
+  const tb = document.querySelector('#mapTable tbody');
+  tb.innerHTML = ACCOUNTS.map(a=>{
+    const p = byCode[a.accountCode];
+    return `<tr data-code="${esc(a.accountCode)}" class="${p?'':'unmapped'}">
+      <td>${esc(a.accountCode)}</td><td>${esc(a.accountName)}</td>
+      <td class="num">${a.cyBalance.toLocaleString('en-MT',{minimumFractionDigits:2})}</td>
+      <td><input type="number" class="cfr" value="${p?p.cfrCode:''}" style="width:90px"></td>
+      <td><select class="sheet"><option${p&&p.sheet==='B_Sheet'?' selected':''}>B_Sheet</option><option${p&&p.sheet==='Income'?' selected':''}>Income</option></select></td>
+      <td>${badge(p?p.confidence:null)}</td>
+      <td><input type="checkbox" class="excl"></td></tr>`;
+  }).join('');
+  document.getElementById('interview').innerHTML = QUESTIONS.map(q=>`
+    <p><label><strong>${esc(q.text)}</strong><br>
+    <span class="legal">${esc(q.legalBasis)}</span><br>
+    € <input type="number" class="answer" data-id="${esc(q.id)}" value="${q.preAnswer??''}" step="0.01">
+    ${q.preAnswer!=null?'<span class="muted">(pre-filled from ETB — confirm)</span>':''}</label></p>`).join('');
+  document.getElementById('step2').hidden = false;
+  tb.addEventListener('input', refreshGate); tb.addEventListener('change', refreshGate);
+  refreshGate();
+});
+
+function renderPriorReviewPanel(){
+  const panel = document.getElementById('priorReviewPanel');
+  if(!PRIOR_REVIEW){ panel.innerHTML = ''; return; }
+  const findings = PRIOR_REVIEW.findings || [];
+  const hasErrors = findings.some(f => f.severity === 'error');
+  if(findings.length === 0){
+    panel.innerHTML = `<div class="priorReview clean">Prior-year return reviewed — no errors found.</div>`;
+    return;
+  }
+  const list = findings.map(f =>
+    `<div class="finding ${f.severity}">${f.severity === 'error' ? '⛔' : '⚠'} ${esc(f.message)}</div>`
+  ).join('');
+  const ackRow = hasErrors
+    ? `<div class="ackRow"><label><input type="checkbox" id="priorAck"> I have reviewed these prior-year findings and choose to proceed</label></div>`
+    : '';
+  panel.innerHTML = `<div class="priorReview ${hasErrors?'hasErrors':'clean'}">
+    <strong>Prior-year return review</strong>
+    ${list}
+    ${ackRow}
+  </div>`;
+  const ack = document.getElementById('priorAck');
+  if(ack) ack.addEventListener('change', refreshGate);
+}
+
+function refreshGate(){
+  const rows = [...document.querySelectorAll('#mapTable tbody tr')];
+  let allOk = true;
+  for(const tr of rows){
+    const excl = tr.querySelector('.excl').checked;
+    const cfr = tr.querySelector('.cfr').value.trim();
+    const ok = excl || cfr !== '';
+    tr.classList.toggle('unmapped', !ok);
+    if(!ok) allOk = false;
+  }
+  const priorErrors = (PRIOR_REVIEW && PRIOR_REVIEW.findings || []).some(f => f.severity === 'error');
+  if(priorErrors){
+    const ack = document.getElementById('priorAck');
+    if(!ack || !ack.checked) allOk = false;
+  }
+  document.getElementById('generateBtn').disabled = !allOk;
+}
+
+document.getElementById('generateBtn').addEventListener('click', async ()=>{
+  const rules = [], excluded = [];
+  for(const tr of document.querySelectorAll('#mapTable tbody tr')){
+    const code = tr.dataset.code;
+    if(tr.querySelector('.excl').checked){ excluded.push(code); continue; }
+    rules.push({ ledgerCode: code, cfrCode: Number(tr.querySelector('.cfr').value), sheet: tr.querySelector('.sheet').value });
+  }
+  const answers = {};
+  for(const inp of document.querySelectorAll('.answer')) answers[inp.dataset.id] = Number(inp.value||0);
+  const priorAck = document.getElementById('priorAck');
+  const res = await fetch(`/api/session/${SESSION}/generate`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ rules, answers, excluded,
+      clientName: document.getElementById('clientName').value,
+      yearOfAssessment: document.getElementById('ya').value,
+      priorReviewAcknowledged: !!(priorAck && priorAck.checked) })
+  });
+  const data = await res.json();
+  const msgs = document.getElementById('genMsgs');
+  if(!res.ok){ msgs.innerHTML = `<div class="warn">${esc(data.error)}</div>`; return; }
+  msgs.innerHTML = data.unmatched.length
+    ? `<div class="warn">Codes with no row in this template (NOT written — enter manually): ${data.unmatched.map(u=>`${u.sheet}/${u.cfrCode}`).join(', ')}</div>` : '';
+  if(data.tie && !data.tie.ok) msgs.innerHTML += data.tie.issues.map(i=>`<div class="warn">${esc(i)}</div>`).join('');
+  document.getElementById('dlReturn').href = `/api/session/${SESSION}/return.xlsx`;
+  document.getElementById('dlSummary').href = `/api/session/${SESSION}/summary.html`;
+  document.getElementById('step3').hidden = false;
+});
+</script>
+</body>
+</html>
