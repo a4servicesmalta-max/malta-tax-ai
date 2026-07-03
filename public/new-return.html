@@ -393,8 +393,15 @@ $('generateBtn').addEventListener('click', async ()=>{
   if(data.unmatched&&data.unmatched.length) m+=`<div class="callout c-warn">Codes with no row in this template (NOT written — enter manually): ${data.unmatched.map(u=>`${u.sheet}/${u.cfrCode}`).join(', ')}</div>`;
   if(data.tie&&!data.tie.ok) m+=data.tie.issues.map(i=>`<div class="callout c-warn">${esc(i)}</div>`).join('');
   $('genMsgs').innerHTML=m;
-  $('dlReturn').href=`/api/session/${SESSION}/return.xlsx`;
-  $('dlSummary').href=`/api/session/${SESSION}/summary.html`;
+  // Prefer the persisted, streamed download (survives restart + avoids the
+  // large-buffer proxy 503); fall back to the in-memory session route.
+  if(data.returnId){
+    $('dlReturn').href=`/api/returns/${data.returnId}/return.xlsx`;
+    $('dlSummary').href=`/api/returns/${data.returnId}/summary.html`;
+  } else {
+    $('dlReturn').href=`/api/session/${SESSION}/return.xlsx`;
+    $('dlSummary').href=`/api/session/${SESSION}/summary.html`;
+  }
   setStep(3);
 });
 

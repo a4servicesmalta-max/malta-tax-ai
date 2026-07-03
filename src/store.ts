@@ -105,3 +105,13 @@ export function readReturnFile(id: string, ext: 'xlsx' | 'html'): Buffer | null 
   const p = path.join(FILES_DIR, `${id}.${ext}`);
   return fs.existsSync(p) ? fs.readFileSync(p) : null;
 }
+
+/**
+ * Absolute path of a stored return file, or null if missing. Used to STREAM the
+ * download via res.sendFile — Render's HTTP/2 proxy 503s on a single large
+ * res.send(buffer), but streams a file fine.
+ */
+export function returnFilePath(id: string, ext: 'xlsx' | 'html'): string | null {
+  const p = path.join(FILES_DIR, `${id}.${ext}`);
+  return fs.existsSync(p) ? p : null;
+}

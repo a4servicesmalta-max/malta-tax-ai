@@ -36,7 +36,7 @@ import {
   consumeCredit,
   bootstrapAdmin,
 } from './accounts';
-import { saveReturn, listReturns, findReturn, readReturnFile } from './store';
+import { saveReturn, listReturns, findReturn, returnFilePath } from './store';
 
 interface Session {
   accounts: EtbAccount[];
@@ -209,16 +209,17 @@ export function createApp() {
   const serveReturnFile = (ext: 'xlsx' | 'html') => (req: express.Request, res: express.Response) => {
     const row = findReturn(req.params.id);
     if (!row || row.userId !== res.locals.userId) return res.status(404).json({ error: 'not found' });
-    const buf = readReturnFile(row.id, ext);
-    if (!buf) return res.status(404).json({ error: 'not found' });
+    const filePath = returnFilePath(row.id, ext);
+    if (!filePath) return res.status(404).json({ error: 'not found' });
+    // Stream from disk (res.sendFile) — Render's HTTP/2 proxy 503s on a large
+    // res.send(buffer), but streams a file correctly.
     if (ext === 'xlsx') {
-      res
-        .type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        .setHeader('Content-Disposition', 'attachment; filename="tax-return-filled.xlsx"');
+      res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="tax-return-filled.xlsx"');
     } else {
       res.type('html');
     }
-    res.send(buf);
+    res.sendFile(filePath);
   };
   app.get('/api/returns/:id/return.xlsx', serveReturnFile('xlsx'));
   app.get('/api/returns/:id/summary.html', serveReturnFile('html'));
