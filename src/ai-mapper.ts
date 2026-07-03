@@ -4,15 +4,13 @@
  * table when unconfigured or on any parse/API failure.
  * Grounding: prior-year code set + firm-corpus example mappings in the prompt.
  */
-import Anthropic from '@anthropic-ai/sdk';
 import type { EtbAccount, ProposedRule } from './domain';
 import { proposeMapping, type ProposalContext } from './mapping';
+import { isAiConfigured, callAnthropic, type AiAuthOptions } from './ai-auth';
 
-export interface AiMapperOptions {
-  apiKey?: string;
+/** Max-first / API-key-fallback auth (see ai-auth), plus an optional model override. */
+export interface AiMapperOptions extends AiAuthOptions {
   model?: string;
-  /** Test seam: injected message-create function. */
-  createMessage?: (req: unknown) => Promise<{ content: Array<{ type: string; text?: string }> }>;
 }
 
 export interface AiProposal {
@@ -41,33 +39,29 @@ export async function proposeMappingAI(
   ctx: ProposalContext,
   opts: AiMapperOptions = {}
 ): Promise<AiProposal> {
-  const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY;
   const fallback = (): AiProposal => ({ rules: proposeMapping(accounts, ctx).rules, source: 'heuristic' });
-  if (!apiKey) return fallback();
+  if (!isAiConfigured(opts)) return fallback();
 
   try {
-    const create =
-      opts.createMessage ??
-      (async (req: unknown) => {
-        const client = new Anthropic({ apiKey });
-        return client.messages.create(req as never) as never;
-      });
     const priorNote = ctx.priorYearCodes?.size
       ? `Codes used on this client's prior-year return (prefer these where sensible): ${[...ctx.priorYearCodes].join(', ')}.`
       : '';
-    const res = await create({
-      model: opts.model ?? process.env.ANTHROPIC_MODEL ?? 'claude-fable-5',
-      max_tokens: 2000,
-      system: SYSTEM,
-      messages: [
-        {
-          role: 'user',
-          content: `${priorNote}\nAccounts:\n${accounts
-            .map((a) => `${a.accountCode}\t${sanitizeName(a.accountName)}\t${a.cyBalance >= 0 ? 'Dr' : 'Cr'}`)
-            .join('\n')}`,
-        },
-      ],
-    });
+    const res = await callAnthropic(
+      {
+        model: opts.model ?? process.env.ANTHROPIC_MODEL ?? 'claude-fable-5',
+        max_tokens: 2000,
+        system: SYSTEM,
+        messages: [
+          {
+            role: 'user',
+            content: `${priorNote}\nAccounts:\n${accounts
+              .map((a) => `${a.accountCode}\t${sanitizeName(a.accountName)}\t${a.cyBalance >= 0 ? 'Dr' : 'Cr'}`)
+              .join('\n')}`,
+          },
+        ],
+      },
+      opts
+    );
     const text = res.content.find((c) => c.type === 'text')?.text ?? '';
     const parsed = JSON.parse(text.replace(/^```json?\s*|\s*```$/g, ''));
     if (!Array.isArray(parsed.rules)) return fallback();

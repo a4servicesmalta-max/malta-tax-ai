@@ -26,10 +26,17 @@ of the core workflow.
 ## Configuration
 
 The tool runs with **no configuration**. To enable the AI mapping proposal and
-reasonableness review, copy `.env.example` to `.env` (gitignored) and set
-`ANTHROPIC_API_KEY` (the account needs a positive credit balance). `npm start`
-and `npm run dev` load `.env` automatically if present. Never paste a key onto
-a command line or into any committed file.
+reasonableness review, copy `.env.example` to `.env` (gitignored) and set a
+credential. Two are supported, with automatic preference:
+
+1. **`CLAUDE_CODE_OAUTH_TOKEN`** — a Claude Max / Pro subscription token from
+   `claude setup-token` (billed to the plan). Used first when present.
+2. **`ANTHROPIC_API_KEY`** — pay-per-token key (needs a credit balance). Used
+   automatically as a fallback when the Max plan is rate-limited (maxed out) or
+   the OAuth token is unusable, and on its own if it's the only one set.
+
+`npm start` / `npm run dev` load `.env` automatically if present. Never paste a
+credential onto a command line or into any committed file.
 
 ## Quickstart
 

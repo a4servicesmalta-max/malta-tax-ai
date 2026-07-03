@@ -11,9 +11,9 @@
  * failure yields `available:false` with an empty finding list; it never throws
  * and never blocks generation.
  */
-import Anthropic from '@anthropic-ai/sdk';
 import type { EtbAccount } from './domain';
 import { sanitizeName } from './ai-mapper';
+import { isAiConfigured, callAnthropic, type AiAuthOptions } from './ai-auth';
 import type { TaxComputation } from './tax-computation';
 
 export interface ReviewFinding {
@@ -28,11 +28,9 @@ export interface ReasonablenessReview {
   note?: string;
 }
 
-export interface ReviewOptions {
-  apiKey?: string;
+/** Max-first / API-key-fallback auth (see ai-auth), plus an optional model override. */
+export interface ReviewOptions extends AiAuthOptions {
   model?: string;
-  /** Test seam: injected message-create function. */
-  createMessage?: (req: unknown) => Promise<{ content: Array<{ type: string; text?: string }> }>;
 }
 
 const SYSTEM = `You are a senior Maltese corporate income tax reviewer performing a REASONABLENESS review of a
@@ -70,38 +68,34 @@ export async function reasonablenessReview(
   computation: TaxComputation,
   opts: ReviewOptions = {}
 ): Promise<ReasonablenessReview> {
-  const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
+  if (!isAiConfigured(opts)) {
     return {
       available: false,
       findings: [],
-      note: 'AI reasonableness review is not configured (set ANTHROPIC_API_KEY). The deterministic computation and checks still apply.',
+      note: 'AI reasonableness review is not configured (set CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY). The deterministic computation and checks still apply.',
     };
   }
 
   try {
-    const create =
-      opts.createMessage ??
-      (async (req: unknown) => {
-        const client = new Anthropic({ apiKey });
-        return client.messages.create(req as never) as never;
-      });
-    const res = await create({
-      model: opts.model ?? process.env.ANTHROPIC_MODEL ?? 'claude-fable-5',
-      max_tokens: 1500,
-      system: SYSTEM,
-      messages: [
-        {
-          role: 'user',
-          content:
-            `Ledger accounts:\n` +
-            accounts
-              .map((a) => `${a.accountCode}\t${sanitizeName(a.accountName)}\t${a.cyBalance >= 0 ? 'Dr' : 'Cr'} ${eur(Math.abs(a.cyBalance))}`)
-              .join('\n') +
-            `\n\nDraft tax computation:\n${computationLines(computation)}`,
-        },
-      ],
-    });
+    const res = await callAnthropic(
+      {
+        model: opts.model ?? process.env.ANTHROPIC_MODEL ?? 'claude-fable-5',
+        max_tokens: 1500,
+        system: SYSTEM,
+        messages: [
+          {
+            role: 'user',
+            content:
+              `Ledger accounts:\n` +
+              accounts
+                .map((a) => `${a.accountCode}\t${sanitizeName(a.accountName)}\t${a.cyBalance >= 0 ? 'Dr' : 'Cr'} ${eur(Math.abs(a.cyBalance))}`)
+                .join('\n') +
+              `\n\nDraft tax computation:\n${computationLines(computation)}`,
+          },
+        ],
+      },
+      opts
+    );
     const text = res.content.find((c) => c.type === 'text')?.text ?? '';
     const parsed = JSON.parse(text.replace(/^```json?\s*|\s*```$/g, ''));
     if (!Array.isArray(parsed.findings)) return { available: true, findings: [] };

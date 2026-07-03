@@ -12,8 +12,10 @@ const COMP = computeTax(50000, {}); // no depreciation add-back despite the char
 const reply = (obj: unknown) => async () => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 
 describe('reasonablenessReview', () => {
-  it('is unavailable (never throws, no findings) when no API key is configured', async () => {
+  it('is unavailable (never throws, no findings) when no credentials are configured', async () => {
     vi.stubEnv('ANTHROPIC_API_KEY', '');
+    vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', '');
+    vi.stubEnv('ANTHROPIC_AUTH_TOKEN', '');
     try {
       const r = await reasonablenessReview(ETB, COMP, { apiKey: undefined });
       expect(r.available).toBe(false);

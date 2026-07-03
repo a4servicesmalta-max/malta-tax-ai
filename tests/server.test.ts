@@ -81,7 +81,10 @@ describe('server', () => {
       .post('/api/session')
       .attach('etb', etb, 'etb.xlsx')
       .attach('template', template, 'template.xlsx');
-    vi.stubEnv('ANTHROPIC_API_KEY', ''); // deterministic: exercise the unconfigured path
+    // deterministic: exercise the unconfigured path regardless of the dev's env
+    vi.stubEnv('ANTHROPIC_API_KEY', '');
+    vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', '');
+    vi.stubEnv('ANTHROPIC_AUTH_TOKEN', '');
     try {
       const res = await request(app)
         .post(`/api/session/${s.body.sessionId}/review`)

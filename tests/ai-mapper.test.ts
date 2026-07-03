@@ -7,10 +7,17 @@ const ETB: EtbAccount[] = [
 ];
 
 describe('ai-mapper', () => {
-  it('falls back to heuristics when no API key is configured', async () => {
-    const res = await proposeMappingAI(ETB, {}, { apiKey: undefined });
-    expect(res.source).toBe('heuristic');
-    expect(res.rules.length).toBeGreaterThan(0);
+  it('falls back to heuristics when no credentials are configured', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', '');
+    vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', '');
+    vi.stubEnv('ANTHROPIC_AUTH_TOKEN', '');
+    try {
+      const res = await proposeMappingAI(ETB, {}, { apiKey: undefined });
+      expect(res.source).toBe('heuristic');
+      expect(res.rules.length).toBeGreaterThan(0);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('parses a valid model response into proposed rules', async () => {
