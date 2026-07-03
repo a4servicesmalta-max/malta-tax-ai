@@ -11,6 +11,7 @@
  * (assets = codes < 3000 vs equity & liabilities = codes >= 3000) and both the
  * review and the cross-check honour it.
  */
+import * as XLSX from 'xlsx';
 import { readCfrValues, type CfrValue } from './template-reader';
 import type { EtbAccount, MappingProfile } from './domain';
 import { applyMapping } from './mapping';
@@ -48,6 +49,40 @@ export async function readPriorReturn(buffer: Buffer): Promise<PriorReturnInfo> 
     values,
     convention: detectConvention(values).convention,
   };
+}
+
+/**
+ * Losses carried forward on a filed prior return (p4 fields 70a–c) — becomes
+ * this year's losses-b/f pre-answer. The row is located by its label text so
+ * template-vintage row drift doesn't break it; the three tax-account value
+ * cells sit in fixed columns K/O/R. Returns null when nothing readable —
+ * never a guessed figure.
+ */
+export function priorLossesCarriedForward(buffer: Buffer): number | null {
+  let ws: XLSX.WorkSheet | undefined;
+  try {
+    ws = XLSX.read(buffer, { type: 'buffer', sheets: ['p4'] }).Sheets['p4'];
+  } catch {
+    return null;
+  }
+  if (!ws || !ws['!ref']) return null;
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    const label = ws[XLSX.utils.encode_cell({ r, c: 2 })]; // column C
+    if (!label || !/unabsorbed trading losses c\/?fwd/i.test(String(label.v))) continue;
+    let sum = 0;
+    let found = false;
+    for (const c of [10, 14, 17]) {
+      // K/O/R: Immovable Property, Maltese Taxed, Foreign Income value columns
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      if (cell && typeof cell.v === 'number') {
+        sum += cell.v;
+        found = true;
+      }
+    }
+    return found ? round2(Math.abs(sum)) : null;
+  }
+  return null;
 }
 
 export interface CrossCheckMismatch {

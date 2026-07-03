@@ -37,6 +37,42 @@ describe('parseEtb', () => {
     });
   });
 
+  it('parses an extended TB with year-numbered closing columns, skipping the repeated header', () => {
+    const buf = syntheticEtbXlsx([
+      ['n/c', 'ACCOUNT DESCRIPTION', 'Client TB', 'Adjustments', 2024, 'P/B', 2023],
+      [null, null, '€', '€', '€', null, '€'],
+      ['N/C', 'Account Description', 'Client TB', 'Adjustments', 2024, 'P/B', 2023],
+      ['0500', 'Equipment', 606084, -1, 606083, 'B', 604706],
+      ['4000', 'Sales', -700000, 0, -700000, 'P', -650000],
+      ['5000', 'Purchases', 93917, 0, 93917, 'P', 45294],
+    ]);
+    const res = parseEtb(buf);
+    // year columns (max=CY, next=PY) supersede the pre-adjustment "Client TB" column
+    expect(res.accounts).toEqual([
+      { accountCode: '0500', accountName: 'Equipment', cyBalance: 606083, pyBalance: 604706 },
+      { accountCode: '4000', accountName: 'Sales', cyBalance: -700000, pyBalance: -650000 },
+      { accountCode: '5000', accountName: 'Purchases', cyBalance: 93917, pyBalance: 45294 },
+    ]);
+    expect(res.warnings).toContain('Row 3 ("Account Description") skipped as repeated header row.');
+  });
+
+  it('parses a bare Dr/Cr TB with combined "code name" cells and no description header', () => {
+    const buf = syntheticEtbXlsx([
+      ['FreeHour Limited', null, null],
+      ['Trial Balance', null, null],
+      [null, 'Debit', 'Credit'],
+      ['0002000 BOV Bank', 71780.01, null],
+      ['0004000 BOV Overdraft', null, 3891.87],
+      ['4000000 Sales', null, 67888.14],
+    ]);
+    const res = parseEtb(buf);
+    expect(res.accounts).toEqual([
+      { accountCode: '0002000', accountName: 'BOV Bank', cyBalance: 71780.01, pyBalance: null },
+      { accountCode: '0004000', accountName: 'BOV Overdraft', cyBalance: -3891.87, pyBalance: null },
+      { accountCode: '4000000', accountName: 'Sales', cyBalance: -67888.14, pyBalance: null },
+    ]);
+  });
+
   it('rejects a file where no header row can be found', () => {
     const buf = syntheticEtbXlsx([['just', 'some', 'text'], ['more', 'noise', 1]]);
     expect(() => parseEtb(buf)).toThrow(/could not locate an ETB header row/i);

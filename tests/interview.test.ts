@@ -35,8 +35,14 @@ describe('interview', () => {
     const fills = fillsFromAnswers({ depreciationAddBack: 3000, lossesBroughtForward: 0 });
     expect(fills).toHaveLength(1);
     expect(fills[0]).toMatchObject({ amount: 3000, label: expect.stringMatching(/depreciation/i) });
-    // anchor not yet surveyed -> manual entry
-    expect(fills[0].anchorId).toBeNull();
+    // anchored since the YA2025 survey (p3!E8, field 2a)
+    expect(fills[0].anchorId).toBe('depreciationAddBack');
+  });
+
+  it('keeps schedule-backed items as manual entries (anchor is a formula cell)', () => {
+    const fills = fillsFromAnswers({ capitalAllowancesTotal: 5000, dividendsExemptPE: 800 });
+    expect(fills).toHaveLength(2);
+    for (const f of fills) expect(f.anchorId).toBeNull();
   });
 
   it('excludes accumulated depreciation from the add-back pre-answer', () => {

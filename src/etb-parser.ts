@@ -70,6 +70,55 @@ function toNumber(v: unknown): number | null {
   return Number(s) * sign;
 }
 
+/** Classify one candidate header row into column roles. */
+function classifyRow(row: unknown[]): {
+  cols: Map<number, ColKind>;
+  balanceHeaders: string[];
+  isHeader: boolean;
+} {
+  const cols = new Map<number, ColKind>();
+  const balanceHeaders: string[] = [];
+  const yearCols: Array<{ c: number; year: number }> = [];
+  row.forEach((cell, c) => {
+    if (typeof cell === 'string') {
+      const kind = classify(cell);
+      if (kind === 'balance') balanceHeaders.push(cell.trim());
+      if (kind && ![...cols.values()].includes(kind)) cols.set(c, kind);
+    } else if (typeof cell === 'number' && Number.isInteger(cell) && cell >= 1990 && cell <= 2100) {
+      yearCols.push({ c, year: cell });
+    }
+  });
+  // Extended TBs head their closing-balance columns with the year itself
+  // ("… | 2024 | … | 2023"); those supersede pre-adjustment text columns like
+  // "Client TB", so the ambiguity is resolved deterministically: max year = CY,
+  // next = PY.
+  // (≥2 labelled columns required, so a data row whose balance happens to equal
+  // a year number — e.g. €2024 — can't be mistaken for a header.)
+  if (yearCols.length && cols.size >= 2) {
+    yearCols.sort((a, b) => b.year - a.year);
+    for (const [c, k] of [...cols]) if (k === 'balance' || k === 'pyBalance') cols.delete(c);
+    cols.set(yearCols[0].c, 'balance');
+    if (yearCols[1]) cols.set(yearCols[1].c, 'pyBalance');
+    balanceHeaders.length = 0;
+  }
+  const kinds = new Set(cols.values());
+  const hasAmount = kinds.has('balance') || (kinds.has('debit') && kinds.has('credit'));
+  let hasName = kinds.has('name') || kinds.has('code');
+  // Bare Dr/Cr trial balances (e.g. QuickBooks exports) label only the amount
+  // columns; the unlabelled description column sits immediately to their left.
+  // Restricted to true Debit+Credit pairs — a lone balance-ish word ("Bank
+  // current account") must never turn a data row into a synthetic header.
+  if (kinds.has('debit') && kinds.has('credit') && !hasName) {
+    const amountCols = [...cols].filter(([, k]) => k !== 'name' && k !== 'code').map(([c]) => c);
+    const left = Math.min(...amountCols) - 1;
+    if (left >= 0 && !cols.has(left)) {
+      cols.set(left, 'name');
+      hasName = true;
+    }
+  }
+  return { cols, balanceHeaders, isHeader: hasAmount && hasName };
+}
+
 export function parseEtb(buffer: Buffer): ParsedEtb {
   const wb = XLSX.read(buffer, { type: 'buffer' });
   let best: {
@@ -87,19 +136,8 @@ export function parseEtb(buffer: Buffer): ParsedEtb {
       defval: null,
     });
     for (let r = 0; r < Math.min(rows.length, 30); r++) {
-      const cols = new Map<number, ColKind>();
-      const balanceHeaders: string[] = [];
-      (rows[r] ?? []).forEach((cell, c) => {
-        if (typeof cell === 'string') {
-          const kind = classify(cell);
-          if (kind === 'balance') balanceHeaders.push(cell.trim());
-          if (kind && ![...cols.values()].includes(kind)) cols.set(c, kind);
-        }
-      });
-      const kinds = new Set(cols.values());
-      const hasAmount = kinds.has('balance') || (kinds.has('debit') && kinds.has('credit'));
-      const hasName = kinds.has('name') || kinds.has('code');
-      if (hasAmount && hasName) {
+      const { cols, balanceHeaders, isHeader } = classifyRow(rows[r] ?? []);
+      if (isHeader) {
         const score = cols.size;
         if (!best || score > best.score) best = { score, sheet: sheetName, row: r, cols, balanceHeaders };
       }
@@ -134,10 +172,25 @@ export function parseEtb(buffer: Buffer): ParsedEtb {
   const accounts: EtbAccount[] = [];
   for (let r = best.row + 1; r < rows.length; r++) {
     const row = rows[r] ?? [];
-    const name = cName != null ? String(row[cName] ?? '').trim() : '';
+    let name = cName != null ? String(row[cName] ?? '').trim() : '';
     const codeRaw = cCode != null ? row[cCode] : null;
-    const code = codeRaw != null ? String(codeRaw).trim() : '';
+    let code = codeRaw != null ? String(codeRaw).trim() : '';
     if (!name && !code) continue;
+    // Repeated header rows inside the data region (title/units duplicates)
+    // would otherwise parse as fake accounts — skip them LOUDLY.
+    if (classifyRow(row).isHeader) {
+      warnings.push(`Row ${r + 1} ("${name || code}") skipped as repeated header row.`);
+      continue;
+    }
+    // Combined "0002000 BOV Bank" cells (no separate code column): split so the
+    // code is usable for mapping rules and the name for interview triggers.
+    if (!code) {
+      const m = name.match(/^(\d{3,})\s+(.+)$/);
+      if (m) {
+        code = m[1];
+        name = m[2];
+      }
+    }
     // Summary rows (totals, net assets/profit lines) are skipped LOUDLY so real
     // accounts like "Net wages payable" are never dropped invisibly.
     const summaryRe = /^(grand\s+)?total|^net (assets|liabilit|profit|loss|equity)/i;

@@ -35,6 +35,25 @@ describe('fillCfrReturn', () => {
     expect(wb).toContain('fullCalcOnLoad="1"');
   });
 
+  it('writes description text as an escaped inline string, inserted in column order', async () => {
+    const tpl = await syntheticCfrWorkbook({ bSheet: [], income: [] });
+    const { buffer } = await fillCfrReturn(
+      tpl,
+      [],
+      [
+        { sheet: 'p3', ref: 'E6', value: 1200 },
+        { sheet: 'p3', ref: 'B6', value: 'Add back: fines & <penalties>' },
+      ]
+    );
+    const zip = await JSZip.loadAsync(buffer);
+    const p3 = await zip.file('xl/worksheets/sheet3.xml')!.async('string');
+    expect(p3).toContain(
+      '<c r="B6" t="inlineStr"><is><t xml:space="preserve">Add back: fines &amp; &lt;penalties&gt;</t></is></c>'
+    );
+    expect(p3).toContain('<c r="E6"><v>1200</v></c>');
+    expect(p3.indexOf('r="B6"')).toBeLessThan(p3.indexOf('r="E6"'));
+  });
+
   it('reports unmatched codes instead of silently dropping them', async () => {
     const tpl = await syntheticCfrWorkbook({ bSheet: [{ row: 10, code: 2150 }], income: [] });
     const { unmatched } = await fillCfrReturn(tpl, [

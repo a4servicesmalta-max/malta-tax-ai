@@ -13,6 +13,8 @@ export interface CfrValue {
   cfrCode: number;
   row: number;
   value: number | null;
+  /** True when the value cell holds a formula — a template-computed row, not preparer input. */
+  computed?: boolean;
 }
 
 function attr(tag: string, name: string): string | undefined {
@@ -82,11 +84,11 @@ export async function readCfrValues(workbook: Buffer, sheets: string[]): Promise
       const row = parseInt(m[2], 10);
       const cfrCode = parseInt(m[3], 10);
       const eRe = new RegExp(
-        `(<${p}c\\b[^>]*\\br="E${row}"[^>]*>)(?:<${p}f\\b[^>]*?(?:/>|>[^<]*</${p}f>))?<${p}v>\\s*(-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\s*</${p}v>`
+        `(<${p}c\\b[^>]*\\br="E${row}"[^>]*>)(<${p}f\\b[^>]*?(?:/>|>[^<]*</${p}f>))?<${p}v>\\s*(-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\s*</${p}v>`
       );
       const em = xml.match(eRe);
-      const value = em && !isNonNumericCell(em[1]) ? parseFloat(em[2]) : null;
-      out.push({ sheet, cfrCode, row, value });
+      const value = em && !isNonNumericCell(em[1]) ? parseFloat(em[3]) : null;
+      out.push({ sheet, cfrCode, row, value, ...(em && em[2] ? { computed: true } : {}) });
     }
   }
   return out;

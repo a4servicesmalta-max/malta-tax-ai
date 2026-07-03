@@ -1,6 +1,6 @@
 # Malta Tax Return Generator — Continuation / Handoff Sheet
 
-Last updated: 2026-07-03. Purpose: let a new chat (or a new engineer) resume this project with zero prior context.
+Last updated: 2026-07-03 (v1.1: ANCHORS populated from real YA2025 returns, prior-year losses continuity wired, real-world ETB layouts supported, replay harness fixed). Purpose: let a new chat (or a new engineer) resume this project with zero prior context.
 
 ---
 
@@ -13,7 +13,7 @@ A standalone tool for Malta accounting/audit firms. A preparer uploads an **ETB*
 - Repo: `C:\Users\user\Downloads\New\tax-return-generator` (standalone git repo, **not pushed to any remote**).
 - Branch: `main` (v1 already merged here; the `feat/taxgen-v1` feature branch was merged and deleted).
 - Stack: Node + TypeScript + Express, JSZip (OOXML), SheetJS `xlsx` (parsing), Vitest, tsx.
-- Status: **v1 complete. 75 tests green, `tsc --noEmit` clean, live end-to-end smoke test green.**
+- Status: **v1.1 complete. 81 tests green, `tsc --noEmit` clean, live end-to-end smoke test green, anchors live-verified against a real 135-sheet YA2025 return.** ETB parser now also handles the firm's real layouts: extended TBs with year-numbered closing columns (Cauchi VACEI upload format — year cols supersede "Client TB", repeated in-data header rows skipped loudly) and bare Dr/Cr QuickBooks TBs with combined "0002000 BOV Bank" cells (Freehour format).
 - Built via brainstorm → spec → plan → subagent-driven execution, each of 8 task-groups passing spec-compliance + adversarial code-quality review. Final whole-branch review: READY TO MERGE, golden rule verified intact across module boundaries.
 
 ## 3. Run / test / verify commands
@@ -48,7 +48,8 @@ npm run replay -- --etb <etb.xlsx> --filed <filed-return.xlsx> [--prior <prior.x
 ## 5. What it DOES vs DOESN'T fill (read this — it's the key nuance)
 
 - **DOES auto-write:** every mapped ETB line — all balance-sheet accounts and all P&L accounts land on their CfR-code rows — plus net profit. The template's formulas then compute all totals, the 35% charge, refunds, and tax-account allocations from those inputs. The financial-statements data-entry surface is filled in full.
-- **DOESN'T auto-write yet:** the tax-computation *adjustment* lines (depreciation add-back, losses brought forward, capital allowances, other interview items). These are computed and listed on the computation summary as "enter on the return" reminders. Reason: the tool locates account lines by CfR code, but doesn't yet know which specific cell holds "losses brought forward" etc. — that's what surveying a real template fixes (see §7).
+- **ALSO auto-writes (since 2026-07-03):** the tax-computation adjustment lines surveyed from real YA2025 returns (TA2_e-CO_2025_Ver 1.1, verified identical across 3 independently filed returns): depreciation add-back (p3!E8, field 2a), unrealised FX (p3!E20 + label B20, field 7a), fines/penalties (p3!E33 + B33, 14a), donations (p3!E41 + B41, 16a), entertainment (p3!E42 + B42, 17a), losses b/f (p4!O52, field 66b Maltese Taxed A/c — written NEGATIVE because 67a = 65a + 66a). Specify-row labels are written as OOXML inline strings.
+- **DOESN'T auto-write (by design, not a gap):** capital allowances (fields 43a–c) and exempt dividends (31a) — those cells are FORMULAS fed by the TRA5/TRA8 schedules, so they stay manual-entry reminders on the computation summary. Auto-filling them means writing the per-asset TRA5 schedule itself (future work).
 
 ## 6. Prior-return review-first gate (user requirement)
 
@@ -56,12 +57,12 @@ Uploaded prior return is reviewed for errors **before** it's relied on: `reviewP
 
 ## 7. KNOWN GAPS / NEXT STEPS (prioritized)
 
-All of the "professional-grade full fill" gaps trace to one dependency: **we need a real blank current-year CfR e-filing template** (or a filed return to read structure from). Fixtures are gitignored/absent; see `scripts/fetch-fixtures.md`.
+~~The old "need a real template" blocker is GONE~~ — real filed YA2025 returns were found locally in `C:\Users\user\Downloads` (Freehour, Cauchi, TR 970841402 "Intellectual Property") and used to survey + verify everything below.
 
-1. **Populate `src/template-map.ts` ANCHORS.** 8 of 9 anchors are `null` (only `netProfitPerAccounts`→p3!E6 is wired). Run `npm run survey` against a real template, read the sheet/row dump, and record the cell refs for `lossesBroughtForward`, `capitalAllowancesTotal`, `depreciationAddBack`, `finesPenaltiesAddBack`, `donationsAddBack`, `entertainmentAddBack`, `unrealizedFxAddBack`, `dividendsExemptPE`. Once set, those interview answers auto-write into the template instead of being manual-entry reminders. **This is the single highest-value next step for "fills the full sheet".**
-2. **Wire prior-year continuity lifting.** Spec calls for deterministically lifting losses b/f, capital-allowance TWDVs (TRA5 roll-forward), and FTA/MTA/IPA/FIA/UA tax-account balances from the prior return. Currently `prior-return.ts` only extracts code/value pairs + convention. `interview.ts` has a `priorLossesBroughtForward` context field that `server.ts` never populates — wire it from the prior return (needs the anchor rows from step 1 to know where these sit).
-3. **Corpus replay accuracy pass.** Once ANCHORS + a real template exist, run `npm run replay` over consecutive-year pairs from the 347 filed returns (Dropbox `/Tax Returns Consolidated`, 66 clients — e.g. MGW Investments YA2021–2026, Gatt & elmer YA2017–2023) to get a measurable accuracy score and the marketing claim "validated against hundreds of real filed Malta returns."
-4. **Model refinement (user's stated plan).** User will refine the mapping/proposal step with **Claude Fable 5**. Default model id is already `claude-fable-5` in `src/ai-mapper.ts` (env-overridable via `ANTHROPIC_MODEL`). Ask the user what "refine" means (accuracy tuning on the mapping? few-shot grounding with corpus examples? something else) before building.
+1. ~~**Populate ANCHORS.**~~ **DONE 2026-07-03.** 6 anchors wired + label cells + sign handling (see §5); `capitalAllowancesTotal`/`dividendsExemptPE` deliberately stay null (formula cells fed by TRA5/TRA8). Live-verified by filling a real 135-sheet YA2025 return: all writes land, labels render, formulas byte-intact.
+2. ~~**Wire prior-year losses continuity.**~~ **DONE 2026-07-03** for losses b/f: `priorLossesCarriedForward()` in `prior-return.ts` locates the p4 "Unabsorbed Trading Losses c/fwd" row by label (row-drift-proof) and sums the K/O/R tax-account columns; `server.ts` feeds it into the interview pre-answer. STILL OPEN: TRA5 TWDV roll-forward and FTA/MTA/IPA/FIA/UA tax-account balances (these live on TRA schedules — same future work as auto-filling TRA5).
+3. **Corpus replay accuracy pass — harness ready, corpus still needed.** `npm run replay` now works against real local pairs: it compares preparer-INPUT rows only (formula/zero/Y-A-marker rows excluded) and is sign-convention aware. Measured heuristic-only floor: Freehour 4/55, Cauchi 0/43 — the misses are granular per-asset-class CfR codes the heuristic table can't guess, i.e. exactly what the AI mapper + prior-year grounding + human confirmation step is for. For the corpus-wide score, fetch Dropbox pairs per `scripts/fetch-fixtures.md` and run with `--prior` (prior-year code grounding).
+4. **Model refinement (user's stated plan).** User will refine the mapping/proposal step with **Claude Fable 5**. Default model id is already `claude-fable-5` in `src/ai-mapper.ts` (env-overridable via `ANTHROPIC_MODEL`). Ask the user what "refine" means (accuracy tuning on the mapping? few-shot grounding with corpus examples? something else) before building. The replay diffs above are the natural eval set.
 5. **Later:** portal integration (core modules `template-writer`/`template-reader`/`mapping`/`interview`/`prior-return` are deliberately dependency-free — no express/multer imports — for reuse inside the VACEI/A4 audit portal, which reads ETB from `EngagementEtb`); multi-tenant product layer (workspaces, sign-off trail); non-trading entity profiles (IP/royalty, funds, NGOs, property); multiple template vintages; COR correction-form workflow.
 
 ## 8. What was reused vs built

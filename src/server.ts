@@ -10,7 +10,13 @@ import path from 'node:path';
 import type { EtbAccount, MappingProfile, MappingRule } from './domain';
 import { parseEtb } from './etb-parser';
 import { extractFsFigures, tieCheck } from './fs-tie-check';
-import { readPriorReturn, priorYearCrossCheck, reviewPriorReturn, type PriorReturnReview } from './prior-return';
+import {
+  readPriorReturn,
+  priorYearCrossCheck,
+  reviewPriorReturn,
+  priorLossesCarriedForward,
+  type PriorReturnReview,
+} from './prior-return';
 import { proposeMappingAI } from './ai-mapper';
 import { applyMapping, netProfitFromMapping } from './mapping';
 import { buildInterview, fillsFromAnswers } from './interview';
@@ -68,7 +74,12 @@ export function createApp() {
         }
 
         const proposal = await proposeMappingAI(parsed.accounts, { priorYearCodes: priorCodes });
-        const interview = buildInterview(parsed.accounts, { hasPriorReturn: !!priorCodes });
+        const interview = buildInterview(parsed.accounts, {
+          hasPriorReturn: !!priorCodes,
+          priorLossesBroughtForward: session.priorBuffer
+            ? priorLossesCarriedForward(session.priorBuffer)
+            : null,
+        });
 
         let crossCheck = null;
         if (session.priorBuffer && proposal.rules.length) {
@@ -134,7 +145,8 @@ export function createApp() {
       for (const f of interviewFills) {
         if (f.anchorId && ANCHORS[f.anchorId]) {
           const a = ANCHORS[f.anchorId]!;
-          directCells.push({ sheet: a.sheet, ref: a.ref, value: f.amount });
+          directCells.push({ sheet: a.sheet, ref: a.ref, value: a.negate ? -Math.abs(f.amount) : f.amount });
+          if (a.labelRef) directCells.push({ sheet: a.sheet, ref: a.labelRef, value: f.label });
         }
       }
       const { buffer, unmatched } = await fillCfrReturn(session.template, fill.codeCells, directCells);

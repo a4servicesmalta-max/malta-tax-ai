@@ -30,7 +30,8 @@ export interface CfrCodeCell {
 export interface CfrDirectCell {
   sheet: string;
   ref: string; // e.g. 'E6'
-  value: number;
+  /** Numbers are figures; strings are description text for "[Please specify below]" rows. */
+  value: number | string;
 }
 
 export interface FillResult {
@@ -93,8 +94,12 @@ function rowOfCode(sheetXml: string, code: number, p: string): number | null {
   return m ? parseInt(m[1], 10) : null;
 }
 
-/** Set a numeric value into `ref`, preserving the cell's style; insert in column order if absent. */
-function setCell(sheetXml: string, ref: string, value: number, p: string): string {
+function escXml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/** Set a value into `ref`, preserving the cell's style; insert in column order if absent. */
+function setCell(sheetXml: string, ref: string, value: number | string, p: string): string {
   const rowNum = ref.match(/\d+$/)![0];
   const rowRe = new RegExp(`(<${p}row\\b[^>]*\\br="${rowNum}"[^>]*>)([\\s\\S]*?)(</${p}row>)`);
   const rm = sheetXml.match(rowRe);
@@ -104,7 +109,11 @@ function setCell(sheetXml: string, ref: string, value: number, p: string): strin
   const cellRe = new RegExp(`<${p}c\\b[^>]*\\br="${ref}"[^>]*?(?:/>|>[\\s\\S]*?</${p}c>)`);
   const existing = inner.match(cellRe);
   const style = existing ? attr(existing[0], 's') : undefined;
-  const newCell = `<${p}c r="${ref}"${style ? ` s="${style}"` : ''}><${p}v>${value}</${p}v></${p}c>`;
+  const sAttr = style ? ` s="${style}"` : '';
+  const newCell =
+    typeof value === 'string'
+      ? `<${p}c r="${ref}"${sAttr} t="inlineStr"><${p}is><${p}t xml:space="preserve">${escXml(value)}</${p}t></${p}is></${p}c>`
+      : `<${p}c r="${ref}"${sAttr}><${p}v>${value}</${p}v></${p}c>`;
 
   if (existing) {
     inner = inner.replace(cellRe, newCell);
@@ -164,7 +173,7 @@ export async function fillCfrReturn(
   const relsXml = await relsFile.async('string');
   const pathMap = sheetPathMap(wbXml, relsXml);
 
-  type Write = { ref?: string; code?: number; value: number };
+  type Write = { ref?: string; code?: number; value: number | string };
   const bySheet = new Map<string, Write[]>();
   const add = (sheet: string, w: Write) => {
     if (!bySheet.has(sheet)) bySheet.set(sheet, []);

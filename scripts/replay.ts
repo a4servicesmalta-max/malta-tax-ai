@@ -25,14 +25,24 @@ export async function replayAccuracy(
   etb: EtbAccount[],
   profile: MappingProfile
 ): Promise<ReplayResult> {
-  const filed = (await readCfrValues(filedReturn, ['B_Sheet', 'Income'])).filter((v) => v.value !== null);
+  // Compare preparer INPUT rows only: template-computed subtotals (formula
+  // cells), empty/zero rows and the Y/A marker row (code 31) are not figures
+  // the generator is supposed to produce.
+  const filed = (await readCfrValues(filedReturn, ['B_Sheet', 'Income'])).filter(
+    (v) => v.value !== null && !v.computed && Math.abs(v.value) > TOL && v.cfrCode !== 31
+  );
+  // Filed returns are commonly all-positive (the template computes the signs);
+  // compare magnitudes under that convention, same as priorYearCrossCheck.
+  const positive = (await readPriorReturn(filedReturn)).convention === 'positive';
   const mapped = applyMapping(etb, profile);
   const byKey = new Map(mapped.codeCells.map((c) => [`${c.sheet}:${c.cfrCode}`, c.amount]));
   let matched = 0;
   const diffs: ReplayResult['diffs'] = [];
   for (const f of filed) {
     const gen = byKey.get(`${f.sheet}:${f.cfrCode}`) ?? null;
-    if (gen !== null && Math.abs(gen - (f.value as number)) <= TOL) matched++;
+    const filedV = positive ? Math.abs(f.value as number) : (f.value as number);
+    const genV = gen !== null && positive ? Math.abs(gen) : gen;
+    if (genV !== null && Math.abs(genV - filedV) <= TOL) matched++;
     else diffs.push({ sheet: f.sheet, cfrCode: f.cfrCode, filed: f.value as number, generated: gen });
   }
   return { total: filed.length, matched, diffs };

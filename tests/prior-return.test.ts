@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import * as XLSX from 'xlsx';
-import { readPriorReturn, priorYearCrossCheck, reviewPriorReturn } from '../src/prior-return';
+import {
+  readPriorReturn,
+  priorYearCrossCheck,
+  reviewPriorReturn,
+  priorLossesCarriedForward,
+} from '../src/prior-return';
 import { syntheticCfrWorkbook } from './helpers/synthetic';
 import type { EtbAccount, MappingProfile } from '../src/domain';
 
@@ -13,6 +18,28 @@ describe('prior-return', () => {
     const info = await readPriorReturn(prior);
     expect(info.codes.has(2150)).toBe(true);
     expect(info.values).toContainEqual({ sheet: 'B_Sheet', cfrCode: 2150, row: 10, value: 4000 });
+  });
+
+  it('extracts losses c/fwd from p4 by label, summing the K/O/R tax-account columns', () => {
+    const row: (string | number | null)[] = new Array(18).fill(null);
+    row[2] = 'Unabsorbed Trading Losses c/fwd'; // column C
+    row[10] = 1500; // K — Immovable Property A/c
+    row[14] = 2500; // O — Maltese Taxed A/c
+    row[17] = 0; // R — Foreign Income A/c
+    const decoy: (string | number | null)[] = new Array(18).fill(null);
+    decoy[2] = 'Unabsorbed Trading Losses b/fwd from previous year'; // must NOT match
+    decoy[14] = 999;
+    const ws = XLSX.utils.aoa_to_sheet([decoy, row]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'p4');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    expect(priorLossesCarriedForward(buf)).toBe(4000);
+  });
+
+  it('returns null losses c/fwd when the workbook has no p4 or no readable values', async () => {
+    const noP4 = await syntheticCfrWorkbook({ bSheet: [], income: [] });
+    expect(priorLossesCarriedForward(noP4)).toBeNull();
+    expect(priorLossesCarriedForward(Buffer.from('not an xlsx'))).toBeNull();
   });
 
   it('cross-check passes when PY balances mapped reproduce the prior return', async () => {
