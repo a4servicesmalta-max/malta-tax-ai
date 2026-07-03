@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://db.onlinewebfonts.com/c/5ac3fe7c6abd2f62067f266d89671492?family=HelveticaNowDisplay-Medium">
+<link rel="stylesheet" href="https://db.onlinewebfonts.com/c/1aa3377e489837a26d019bba501e779d?family=HelveticaNowDisplayW01-Rg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{--font-heading:'HelveticaNowDisplay-Medium','Helvetica Neue',Arial,sans-serif;--font-body:'HelveticaNowDisplayW01-Rg','Helvetica Neue',Arial,sans-serif}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#faf9f7;font-family:var(--font-body)}
+  a{text-decoration:none}
+  input:focus{border-color:#494fdf !important;background:#fff !important}
+</style>
+<title>Create your account — Malta Tax AI</title>
+</head>
+<body>
+<div style="display:flex;min-height:100vh;width:100%;font-family:var(--font-body);color:#14161a;background:#faf9f7">
+
+  <div style="position:relative;width:46%;min-width:420px;overflow:hidden;display:flex;flex-direction:column;padding:44px 52px;color:#14161a">
+    <video src="uploads/hero.mp4" poster="assets/tax-hero-scan.png" autoplay loop muted playsinline preload="auto" style="position:absolute;top:-12px;left:-12px;width:170%;height:calc(100% + 24px);object-fit:cover;object-position:left center;z-index:0;filter:blur(3px) saturate(0.92)"></video>
+    <div style="position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(160deg,rgba(250,249,247,0.92) 0%,rgba(250,249,247,0.72) 55%,rgba(250,249,247,0.45) 100%)"></div>
+
+    <a href="/" style="position:relative;z-index:2;display:flex;align-items:center;gap:10px">
+      <img src="assets/vacei-logo.png" alt="VACEI" style="width:26px;height:30px;object-fit:contain;display:block">
+      <span style="font-family:var(--font-heading);font-size:20px;letter-spacing:-0.02em;color:#14161a;white-space:nowrap">Malta Tax AI</span>
+      <span style="font-size:24px;color:#14161a;user-select:none;line-height:1">&#10035;&#65038;</span>
+    </a>
+
+    <div style="position:relative;z-index:2;margin-top:auto;margin-bottom:auto;padding:48px 0">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:500;letter-spacing:0.14em;color:#8a857c;margin-bottom:14px">&gt; GET_STARTED</div>
+      <h1 style="font-family:var(--font-heading);font-size:clamp(32px,3.6vw,44px);font-weight:500;line-height:1.08;letter-spacing:-0.02em;margin:0 0 16px;color:#14161a;text-wrap:balance">Run your first 3 returns free.</h1>
+      <p style="font-size:17px;color:#3a3d40;max-width:420px;margin:0 0 30px;line-height:1.55">Upload the trial balance and blank CfR template, confirm the mapping and interview — the official template computes the tax.</p>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:center;gap:12px;font-size:15px;color:#14161a"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#494fdf" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>3 free returns — no credit card</div>
+        <div style="display:flex;align-items:center;gap:12px;font-size:15px;color:#14161a"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#494fdf" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>No figure produced by AI — the template computes</div>
+        <div style="display:flex;align-items:center;gap:12px;font-size:15px;color:#14161a"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#494fdf" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>EU/Malta hosting, never used to train AI</div>
+      </div>
+    </div>
+
+    <p style="position:relative;z-index:2;font-size:13px;color:#5c5951;font-style:italic;margin:0">Built and run inside a working Malta accounting firm.</p>
+  </div>
+
+  <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:48px 32px;background:#faf9f7;border-left:1px solid #e7e5e0">
+    <div style="width:100%;max-width:420px">
+      <div style="margin-bottom:28px">
+        <h2 style="font-family:var(--font-heading);font-size:29px;font-weight:500;color:#14161a;letter-spacing:-0.02em;margin:0 0 8px">Create your account</h2>
+        <p style="font-size:15px;color:#5c5951;margin:0">Start with 3 free returns — no card required.</p>
+      </div>
+
+      <div id="done" style="display:none">
+        <div style="padding:16px 18px;border-radius:12px;background:rgba(42,160,106,0.08);border:1px solid rgba(42,160,106,0.3);color:#1f7a51;font-size:14.5px;line-height:1.5">
+          <strong>Almost there.</strong> We've emailed a confirmation link to <span id="done-email" style="font-family:'JetBrains Mono',monospace"></span>. Click it to activate your account, then <a href="/login" style="color:#1f7a51;text-decoration:underline">sign in</a>.
+        </div>
+      </div>
+
+      <form id="signup-form">
+        <div style="margin-bottom:14px"><label style="display:block;font-size:13px;color:#5c5951;margin-bottom:6px">Work email</label><input id="su-email" type="email" autocomplete="email" placeholder="you@firm.com" style="width:100%;padding:12px 16px;border-radius:12px;border:1px solid #ddd9d2;background:#fff;font-family:var(--font-body);font-size:14px;color:#14161a;outline:none;transition:border-color .15s"></div>
+        <div style="margin-bottom:14px"><label style="display:block;font-size:13px;color:#5c5951;margin-bottom:6px">Firm <span style="color:#a8a49c">(optional)</span></label><input id="su-firm" autocomplete="organization" placeholder="e.g. VACEI Tax" style="width:100%;padding:12px 16px;border-radius:12px;border:1px solid #ddd9d2;background:#fff;font-family:var(--font-body);font-size:14px;color:#14161a;outline:none;transition:border-color .15s"></div>
+        <div style="margin-bottom:22px"><label style="display:block;font-size:13px;color:#5c5951;margin-bottom:6px">Password</label><input id="su-pass" type="password" autocomplete="new-password" placeholder="At least 8 characters" style="width:100%;padding:12px 16px;border-radius:12px;border:1px solid #ddd9d2;background:#fff;font-family:var(--font-body);font-size:14px;color:#14161a;outline:none;transition:border-color .15s"></div>
+
+        <div id="su-error" style="display:none;margin-bottom:16px;padding:11px 14px;border-radius:12px;background:rgba(209,73,58,0.07);border:1px solid rgba(209,73,58,0.35);color:#b23a2c;font-size:13.5px"></div>
+
+        <button type="submit" id="su-submit" style="width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px;border-radius:9999px;border:none;background:#494fdf;color:#fff;font-family:var(--font-body);font-size:15px;font-weight:600;cursor:pointer;transition:background-color .2s">Create account<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+
+        <p style="font-size:12px;color:#a8a49c;text-align:center;margin-top:16px;line-height:1.5">By creating an account you agree to use it for lawful tax-preparation purposes. Your files are processed to prepare your return and are not used to train AI.</p>
+      </form>
+
+      <p style="font-size:14px;color:#5c5951;text-align:center;margin-top:24px;padding-top:24px;border-top:1px solid #e7e5e0">Already have an account? <a href="/login" style="color:#494fdf;font-weight:600">Sign in</a></p>
+    </div>
+  </div>
+
+</div>
+<script>
+  (function () {
+    var form = document.getElementById('signup-form');
+    var btn = document.getElementById('su-submit');
+    var err = document.getElementById('su-error');
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      err.style.display = 'none';
+      btn.disabled = true; btn.style.opacity = '0.7';
+      var email = document.getElementById('su-email').value;
+      try {
+        var res = await fetch('/api/register', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email, firm: document.getElementById('su-firm').value, password: document.getElementById('su-pass').value })
+        });
+        var data = await res.json().catch(function () { return {}; });
+        if (res.ok) {
+          document.getElementById('done-email').textContent = email;
+          form.style.display = 'none';
+          document.getElementById('done').style.display = 'block';
+          return;
+        }
+        err.textContent = data.error || 'Could not create your account.';
+        err.style.display = 'block';
+      } catch (_) {
+        err.textContent = 'Network error — please try again.';
+        err.style.display = 'block';
+      }
+      btn.disabled = false; btn.style.opacity = '1';
+    });
+  })();
+</script>
+</body>
+</html>

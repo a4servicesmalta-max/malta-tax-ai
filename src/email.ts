@@ -39,3 +39,19 @@ export async function notifyAdmin(subject: string, body: string): Promise<void> 
     // best-effort — a mail failure must never surface to the user or block the flow
   }
 }
+
+/**
+ * Send a transactional email to a user (verification, password reset). Unlike
+ * notifyAdmin this THROWS on failure, so signup/reset can tell the user the mail
+ * didn't go out rather than leaving them stuck waiting for a link.
+ */
+export async function sendMail(to: string, subject: string, text: string, html?: string): Promise<void> {
+  if (!emailConfigured()) throw new Error('Email is not configured on the server.');
+  await transport().sendMail({
+    from: process.env.EMAIL_FROM || process.env.SMTP_USER,
+    to,
+    subject,
+    text,
+    ...(html ? { html } : {}),
+  });
+}

@@ -26,6 +26,17 @@ import { notifyAdmin } from './email';
 import { fillCfrReturn } from './template-writer';
 import { renderComputationSummary } from './computation-summary';
 import { ANCHORS } from './template-map';
+import {
+  registerUser,
+  verifyEmail,
+  loginUser,
+  requestReset,
+  resetPassword,
+  currentUser,
+  consumeCredit,
+  bootstrapAdmin,
+} from './accounts';
+import { saveReturn, listReturns, findReturn, readReturnFile } from './store';
 
 interface Session {
   accounts: EtbAccount[];
@@ -39,6 +50,7 @@ interface Session {
 }
 
 export function createApp() {
+  bootstrapAdmin(); // create the env-configured admin account if missing (idempotent)
   const app = express();
   app.set('trust proxy', 1); // behind Render/Railway proxy: real client IP + protocol
   app.use(express.json({ limit: '5mb' }));
@@ -82,86 +94,134 @@ export function createApp() {
   });
   const sessions = new Map<string, Session>();
 
-  // ---- Shared-credential auth gate ----
-  // Active only when APP_PASSWORD is set (so local dev + tests run open). Protects
-  // the app pages and every tax API route with an HMAC-signed, httpOnly cookie.
-  const AUTH_USER = process.env.APP_USER || 'admin';
-  const AUTH_PASS = process.env.APP_PASSWORD || '';
-  const AUTH_ENABLED = AUTH_PASS.length > 0;
-  const AUTH_SECRET = process.env.SESSION_SECRET || `${AUTH_USER}:${AUTH_PASS}`;
-  const signExp = (v: string) => crypto.createHmac('sha256', AUTH_SECRET).update(v).digest('hex');
-  const makeToken = () => {
-    const exp = String(Date.now() + 12 * 3600 * 1000);
-    return `${exp}.${signExp(exp)}`;
-  };
-  const tokenValid = (t: string | undefined): boolean => {
-    if (!t) return false;
-    const i = t.indexOf('.');
-    if (i < 0) return false;
-    const exp = t.slice(0, i);
-    const mac = t.slice(i + 1);
-    if (!/^\d+$/.test(exp) || Number(exp) < Date.now()) return false;
-    const good = signExp(exp);
-    return good.length === mac.length && crypto.timingSafeEqual(Buffer.from(good), Buffer.from(mac));
-  };
-  const isAuthed = (req: express.Request): boolean => {
+  // ---- Accounts + session auth ----
+  // Every request through a protected page/API needs a valid user session cookie.
+  // TAXGEN_OPEN=1 bypasses the gate for local dev/tests (never set in prod).
+  const OPEN = process.env.TAXGEN_OPEN === '1';
+  const cookieToken = (req: express.Request): string | undefined => {
     const m = (req.headers.cookie || '').match(/(?:^|;\s*)mt_auth=([^;]+)/);
-    return m ? tokenValid(decodeURIComponent(m[1])) : false;
+    return m ? decodeURIComponent(m[1]) : undefined;
   };
-  const eqConst = (a: string, b: string): boolean => {
-    const ab = Buffer.from(a);
-    const bb = Buffer.from(b);
-    return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
-  };
-  const PROTECTED_PAGES = new Set(['/new-return', '/new-return.html', '/dashboard', '/dashboard.html']);
-
-  // Per-IP sliding-window rate limit (parity with FS AI Review) — throttles
-  // brute-force against the login. Memory-bounded.
-  const loginHits = new Map<string, number[]>();
-  const rateLimited = (ip: string, limit = 10, windowMs = 300_000): boolean => {
-    const now = Date.now();
-    const hits = (loginHits.get(ip) || []).filter((t) => now - t < windowMs);
-    hits.push(now);
-    loginHits.set(ip, hits);
-    if (loginHits.size > 5000) loginHits.clear();
-    return hits.length > limit;
-  };
-
-  app.post('/api/login', (req, res) => {
-    if (!AUTH_ENABLED) return res.json({ ok: true });
-    if (rateLimited(req.ip || 'unknown')) {
-      return res.status(429).json({ error: 'Too many attempts — try again in a few minutes.' });
-    }
-    const { user, password } = (req.body || {}) as { user?: string; password?: string };
-    const ok =
-      typeof user === 'string' &&
-      typeof password === 'string' &&
-      eqConst(user, AUTH_USER) &&
-      eqConst(password, AUTH_PASS);
-    if (!ok) return res.status(401).json({ error: 'Invalid username or password.' });
+  const setSession = (req: express.Request, res: express.Response, token: string) => {
     const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
     res.setHeader(
       'Set-Cookie',
-      `mt_auth=${makeToken()}; HttpOnly;${secure ? ' Secure;' : ''} SameSite=Lax; Path=/; Max-Age=${12 * 3600}`
+      `mt_auth=${token}; HttpOnly;${secure ? ' Secure;' : ''} SameSite=Lax; Path=/; Max-Age=${12 * 3600}`
     );
+  };
+
+  // Per-IP sliding-window rate limit — throttles brute-force against auth. Memory-bounded.
+  const authHits = new Map<string, number[]>();
+  const rateLimited = (ip: string, limit = 10, windowMs = 300_000): boolean => {
+    const now = Date.now();
+    const hits = (authHits.get(ip) || []).filter((t) => now - t < windowMs);
+    hits.push(now);
+    authHits.set(ip, hits);
+    if (authHits.size > 5000) authHits.clear();
+    return hits.length > limit;
+  };
+
+  app.post('/api/register', async (req, res) => {
+    if (rateLimited(req.ip || '?', 8)) return res.status(429).json({ error: 'Too many attempts — try again in a few minutes.' });
+    const { email, password, firm } = (req.body || {}) as { email?: string; password?: string; firm?: string };
+    const r = await registerUser(email || '', password || '', firm || '');
+    if (!r.ok) return res.status(400).json({ error: r.error });
+    void notifyAdmin('Malta Tax AI — new signup', `New signup: ${email}${firm ? ` (${firm})` : ''}`);
+    res.json({ ok: true, verify: true });
+  });
+
+  app.get('/verify', (req, res) => {
+    const ok = verifyEmail(String(req.query.token || ''));
+    res.redirect(ok ? '/login?verified=1' : '/login?verified=0');
+  });
+
+  app.post('/api/login', (req, res) => {
+    if (rateLimited(req.ip || '?')) return res.status(429).json({ error: 'Too many attempts — try again in a few minutes.' });
+    const { email, password } = (req.body || {}) as { email?: string; password?: string };
+    const r = loginUser(email || '', password || '');
+    if (!r.ok) return res.status(r.needsVerify ? 403 : 401).json({ error: r.error });
+    setSession(req, res, r.token!);
     res.json({ ok: true });
   });
+
   app.post('/api/logout', (_req, res) => {
     res.setHeader('Set-Cookie', 'mt_auth=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0');
     res.json({ ok: true });
   });
 
-  if (AUTH_ENABLED) {
-    app.use((req, res, next) => {
-      const p = req.path;
-      const isApi = p.startsWith('/api/');
-      const isAuthApi = p === '/api/login' || p === '/api/logout';
-      const needsAuth = PROTECTED_PAGES.has(p) || (isApi && !isAuthApi);
-      if (!needsAuth || isAuthed(req)) return next();
-      if (isApi) return res.status(401).json({ error: 'not authenticated' });
-      return res.redirect('/login');
+  app.post('/api/reset-request', async (req, res) => {
+    if (rateLimited(req.ip || '?', 6)) return res.status(429).json({ error: 'Too many attempts — try again in a few minutes.' });
+    await requestReset((req.body || {}).email || '');
+    res.json({ ok: true }); // always ok — never reveal whether the account exists
+  });
+
+  app.post('/api/reset', (req, res) => {
+    const { token, password } = (req.body || {}) as { token?: string; password?: string };
+    const r = resetPassword(String(token || ''), String(password || ''));
+    if (!r.ok) return res.status(400).json({ error: r.error });
+    res.json({ ok: true });
+  });
+
+  const PUBLIC_PAGES = new Set([
+    '/', '/index.html', '/login', '/login.html', '/signup', '/signup.html', '/reset', '/reset.html', '/verify',
+  ]);
+  const PUBLIC_API = new Set(['/api/register', '/api/login', '/api/logout', '/api/reset-request', '/api/reset']);
+
+  app.use((req, res, next) => {
+    if (OPEN) {
+      res.locals.userId = 'test-user';
+      return next();
+    }
+    const p = req.path;
+    if (PUBLIC_API.has(p)) return next();
+    // Static assets (css/js/png/mp4/svg…) are public — but never treat an /api
+    // route as an asset just because it ends in .xlsx/.html.
+    const isAsset = !p.startsWith('/api/') && /\.[a-z0-9]+$/i.test(p) && !p.endsWith('.html');
+    if (isAsset || PUBLIC_PAGES.has(p)) return next();
+    const user = currentUser(cookieToken(req));
+    if (user) {
+      res.locals.userId = user.id;
+      return next();
+    }
+    if (p.startsWith('/api/')) return res.status(401).json({ error: 'not authenticated' });
+    return res.redirect('/login');
+  });
+
+  app.get('/api/me', (req, res) => {
+    const u = currentUser(cookieToken(req));
+    if (!u) return res.status(401).json({ error: 'not authenticated' });
+    res.json({ email: u.email, firm: u.firm, credits: u.credits, emailVerified: u.emailVerified });
+  });
+
+  app.get('/api/returns', (req, res) => {
+    const uid = res.locals.userId as string;
+    res.json({
+      returns: listReturns(uid).map((r) => ({
+        id: r.id,
+        clientName: r.clientName,
+        ya: r.ya,
+        taxCharge: r.taxCharge,
+        createdAt: r.createdAt,
+      })),
     });
-  }
+  });
+
+  const serveReturnFile = (ext: 'xlsx' | 'html') => (req: express.Request, res: express.Response) => {
+    const row = findReturn(req.params.id);
+    if (!row || row.userId !== res.locals.userId) return res.status(404).json({ error: 'not found' });
+    const buf = readReturnFile(row.id, ext);
+    if (!buf) return res.status(404).json({ error: 'not found' });
+    if (ext === 'xlsx') {
+      res
+        .type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        .setHeader('Content-Disposition', 'attachment; filename="tax-return-filled.xlsx"');
+    } else {
+      res.type('html');
+    }
+    res.send(buf);
+  };
+  app.get('/api/returns/:id/return.xlsx', serveReturnFile('xlsx'));
+  app.get('/api/returns/:id/summary.html', serveReturnFile('html'));
 
   app.post(
     '/api/session',
@@ -303,6 +363,17 @@ export function createApp() {
         });
       }
 
+      // Credit gate — each generated return costs one free-return credit.
+      const uid = res.locals.userId as string;
+      if (!OPEN) {
+        const me = currentUser(cookieToken(req));
+        if (!me || me.credits < 1) {
+          return res.status(402).json({
+            error: 'You have no free returns left. Contact us at info@vacei.com to add more.',
+          });
+        }
+      }
+
       const profile: MappingProfile = { rules: rules ?? [] };
       const fill = applyMapping(
         session.accounts.filter((a) => !(excluded ?? []).includes(a.accountCode)),
@@ -341,11 +412,12 @@ export function createApp() {
         (f) => `Prior-year return review (${f.severity}): ${f.message}`
       );
 
+      const comp = computeTax(netProfit, answers ?? {});
       const summary = renderComputationSummary({
         clientName: clientName || 'Client',
         yearOfAssessment: yearOfAssessment || '',
         netProfitPerAccounts: netProfit,
-        computation: computeTax(netProfit, answers ?? {}),
+        computation: comp,
         fills: interviewFills,
         mappingRows: session.accounts
           .filter((a) => fill.applied.has(a.accountCode))
@@ -358,12 +430,35 @@ export function createApp() {
       });
 
       session.output = { xlsx: buffer, summary };
+
+      // Persist the return + spend a credit (production only; OPEN mode skips
+      // both so tests don't touch disk or need real users).
+      let returnId: string | null = null;
+      let creditsLeft: number | null = null;
+      if (!OPEN) {
+        consumeCredit(uid);
+        returnId = crypto.randomUUID();
+        saveReturn(
+          {
+            id: returnId,
+            userId: uid,
+            clientName: clientName || 'Client',
+            ya: yearOfAssessment || '',
+            taxCharge: comp.taxCharge,
+            createdAt: new Date().toISOString(),
+          },
+          buffer,
+          summary
+        );
+        creditsLeft = currentUser(cookieToken(req))?.credits ?? null;
+      }
+
       // Best-effort admin notification (no-op unless SMTP is configured).
       void notifyAdmin(
         'Malta Tax AI — return generated',
         `A tax return was generated on tax.vacei.com:\n\n  Client: ${clientName || '(unnamed)'}\n  Year of assessment: ${yearOfAssessment || '(unspecified)'}\n  Net profit per accounts: ${netProfit.toFixed(2)}`
       );
-      res.json({ downloadReady: true, unmatched, tie: tie ?? null });
+      res.json({ downloadReady: true, unmatched, tie: tie ?? null, returnId, credits: creditsLeft });
     } catch (e) {
       res.status(400).json({ error: (e as Error).message });
     }

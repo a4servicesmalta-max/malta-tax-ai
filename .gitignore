@@ -5,3 +5,4 @@ fixtures/
 .env
 live-*.mjs
 live-e2e-*.xlsx
+data/

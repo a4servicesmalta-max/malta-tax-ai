@@ -24,22 +24,16 @@ describe('security hardening', () => {
   });
 
   it('rate-limits repeated login attempts', async () => {
-    vi.stubEnv('APP_USER', 'vacei');
-    vi.stubEnv('APP_PASSWORD', 'secret123');
-    try {
-      const app = createApp();
-      let sawRateLimit = false;
-      for (let i = 0; i < 13; i++) {
-        const res = await request(app).post('/api/login').send({ user: 'vacei', password: 'wrong' });
-        if (res.status === 429) {
-          sawRateLimit = true;
-          expect(res.body.error).toMatch(/too many/i);
-          break;
-        }
+    const app = createApp();
+    let sawRateLimit = false;
+    for (let i = 0; i < 13; i++) {
+      const res = await request(app).post('/api/login').send({ email: 'x@test.co', password: 'wrong' });
+      if (res.status === 429) {
+        sawRateLimit = true;
+        expect(res.body.error).toMatch(/too many/i);
+        break;
       }
-      expect(sawRateLimit).toBe(true);
-    } finally {
-      vi.unstubAllEnvs();
     }
+    expect(sawRateLimit).toBe(true);
   });
 });

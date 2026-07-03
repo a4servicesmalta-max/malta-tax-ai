@@ -50,11 +50,11 @@
             <div style="position:absolute;bottom:-2px;right:-2px;width:12px;height:12px;background:#2aa06a;border:2px solid #0b0b0d;border-radius:9999px"></div>
           </div>
           <div data-collapsible style="margin-left:11px;text-align:left;overflow:hidden">
-            <p style="font-size:13px;color:#fff;white-space:nowrap;margin:0">Daniel Roth</p>
-            <p style="font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(255,255,255,0.45);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:2px 0 0">daniel.roth@vacei.com</p>
+            <p class="u-name" style="font-size:13px;color:#fff;white-space:nowrap;margin:0">Your account</p>
+            <p class="u-email" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(255,255,255,0.45);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:2px 0 0">—</p>
           </div>
         </div>
-        <a data-collapsible href="/login" style="width:100%;margin-top:4px;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;color:#e07a6a;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;transition:background-color .2s">
+        <a data-collapsible href="/login" class="logout-link" style="width:100%;margin-top:4px;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;color:#e07a6a;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;transition:background-color .2s">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
           Logout
         </a>
@@ -73,13 +73,13 @@
         <h1 style="font-family:var(--font-heading);font-size:21px;font-weight:500;color:#14161a;letter-spacing:-0.02em;margin:0">Dashboard</h1>
       </div>
       <div style="display:flex;align-items:center;gap:18px">
-        <div style="display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:9999px;background:#fff;border:1px solid #e7e5e0;font-family:'JetBrains Mono',monospace;font-size:12px;color:#14161a"><span style="width:6px;height:6px;border-radius:9999px;background:#2aa06a"></span>Free returns: 3</div>
+        <div style="display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:9999px;background:#fff;border:1px solid #e7e5e0;font-family:'JetBrains Mono',monospace;font-size:12px;color:#14161a"><span style="width:6px;height:6px;border-radius:9999px;background:#2aa06a"></span>Free returns: <span class="u-credits" style="margin-left:4px">—</span></div>
         <a href="/new-return" style="display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:9999px;font-size:13.5px;font-weight:600;color:#fff;background:#494fdf;transition:background-color .2s"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>New return</a>
         <div style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #e7e5e0;border-radius:9999px;padding:5px 16px 5px 5px;cursor:pointer">
           <div style="width:34px;height:34px;border-radius:9999px;background:linear-gradient(45deg,#494fdf,#8388ea);color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--font-heading);font-size:14px">D</div>
           <div style="display:flex;flex-direction:column;align-items:flex-start">
-            <span style="font-size:13px;color:#14161a;line-height:1.2;white-space:nowrap">Daniel Roth</span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#a8a49c;line-height:1.2;white-space:nowrap">daniel.roth@vacei.com</span>
+            <span class="u-name" style="font-size:13px;color:#14161a;line-height:1.2;white-space:nowrap">Your account</span>
+            <span class="u-email" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#a8a49c;line-height:1.2;white-space:nowrap">—</span>
           </div>
         </div>
       </div>
@@ -121,11 +121,10 @@
         </div>
 
         <!-- Summary cards -->
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px">
-          <div style="background:#fff;border-radius:14px;border:1px solid #e7e5e0;padding:18px 20px"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#8a857c;margin-bottom:10px">Returns generated</div><div style="font-family:var(--font-heading);font-size:28px;color:#14161a">32</div></div>
-          <div style="background:#fff;border-radius:14px;border:1px solid #e7e5e0;padding:18px 20px"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#8a857c;margin-bottom:10px">Computations prepared</div><div style="font-family:var(--font-heading);font-size:28px;color:#494fdf">41</div></div>
-          <div style="background:#fff;border-radius:14px;border:1px solid #e7e5e0;padding:18px 20px"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#8a857c;margin-bottom:10px">Mapping rows confirmed</div><div style="font-family:var(--font-heading);font-size:28px;color:#14161a">1,284</div></div>
-          <div style="background:#fff;border-radius:14px;border:1px solid #e7e5e0;padding:18px 20px"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#8a857c;margin-bottom:10px">Prior-year issues flagged</div><div style="font-family:var(--font-heading);font-size:28px;color:#d1493a">7</div></div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px">
+          <div style="background:#fff;border-radius:14px;border:1px solid #e7e5e0;padding:18px 20px"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#8a857c;margin-bottom:10px">Returns generated</div><div id="stat-returns" style="font-family:var(--font-heading);font-size:28px;color:#14161a">—</div></div>
+          <div style="background:#fff;border-radius:14px;border:1px solid #e7e5e0;padding:18px 20px"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#8a857c;margin-bottom:10px">Free returns left</div><div id="stat-credits" style="font-family:var(--font-heading);font-size:28px;color:#494fdf">—</div></div>
+          <div style="background:#fff;border-radius:14px;border:1px solid #e7e5e0;padding:18px 20px"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#8a857c;margin-bottom:10px">Your firm</div><div id="stat-firm" style="font-family:var(--font-heading);font-size:22px;color:#14161a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div></div>
         </div>
 
         <!-- Recent returns table -->
@@ -144,45 +143,13 @@
                 <tr style="color:#a8a49c;font-family:'JetBrains Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:0.12em">
                   <th style="padding:0 16px 10px;font-weight:500">Client</th>
                   <th style="padding:0 16px 10px;font-weight:500">YA</th>
-                  <th style="padding:0 16px 10px;font-weight:500">Status</th>
-                  <th style="padding:0 16px 10px;font-weight:500">Mapping</th>
-                  <th style="padding:0 16px 10px;font-weight:500">Computation</th>
-                  <th style="padding:0 16px 10px;text-align:right;font-weight:500">Action</th>
+                  <th style="padding:0 16px 10px;text-align:right;font-weight:500">Tax charge €</th>
+                  <th style="padding:0 16px 10px;font-weight:500">Generated</th>
+                  <th style="padding:0 16px 10px;text-align:right;font-weight:500">Download</th>
                 </tr>
               </thead>
-              <tbody>
-                <tr>
-                  <td style="padding:14px 16px;background:#f6f5f2;border-radius:12px 0 0 12px"><span style="font-family:var(--font-heading);color:#14161a">ABC Trading Ltd</span></td>
-                  <td style="padding:14px 16px;background:#f6f5f2;color:#5c5951">YA2026</td>
-                  <td style="padding:14px 16px;background:#f6f5f2"><span style="padding:4px 12px;border-radius:9999px;background:rgba(42,160,106,0.1);color:#2aa06a;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;border:1px solid rgba(42,160,106,0.3)">Generated</span></td>
-                  <td style="padding:14px 16px;background:#f6f5f2"><span style="color:#2aa06a;font-weight:500">Confirmed</span></td>
-                  <td style="padding:14px 16px;background:#f6f5f2;color:#5c5951">Prepared</td>
-                  <td style="padding:14px 16px;background:#f6f5f2;border-radius:0 12px 12px 0;text-align:right"><a href="#" style="display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:9999px;font-size:12.5px;font-weight:600;color:#fff;background:#494fdf;transition:background-color .2s">View / Download</a></td>
-                </tr>
-                <tr>
-                  <td style="padding:14px 16px;background:#f6f5f2;border-radius:12px 0 0 12px"><span style="font-family:var(--font-heading);color:#14161a">Delta Holdings Ltd</span></td>
-                  <td style="padding:14px 16px;background:#f6f5f2;color:#5c5951">YA2026</td>
-                  <td style="padding:14px 16px;background:#f6f5f2"><span style="padding:4px 12px;border-radius:9999px;background:rgba(224,138,44,0.12);color:#b06a1a;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;border:1px solid rgba(224,138,44,0.3)">In review</span></td>
-                  <td style="padding:14px 16px;background:#f6f5f2"><span style="color:#b06a1a;font-weight:500">3 rows unmapped</span></td>
-                  <td style="padding:14px 16px;background:#f6f5f2;color:#a8a49c">Not prepared</td>
-                  <td style="padding:14px 16px;background:#f6f5f2;border-radius:0 12px 12px 0;text-align:right"><a href="/new-return" style="display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:9999px;font-size:12.5px;font-weight:600;color:#fff;background:#14161a;transition:opacity .2s">Continue</a></td>
-                </tr>
-                <tr>
-                  <td style="padding:14px 16px;background:#f6f5f2;border-radius:12px 0 0 12px"><span style="font-family:var(--font-heading);color:#14161a">Nova Services Ltd</span></td>
-                  <td style="padding:14px 16px;background:#f6f5f2;color:#5c5951">YA2025</td>
-                  <td style="padding:14px 16px;background:#f6f5f2"><span style="padding:4px 12px;border-radius:9999px;background:#efece6;color:#8a857c;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;border:1px solid #e0dcd4;animation:pulse 2s infinite">Processing</span></td>
-                  <td style="padding:14px 16px;background:#f6f5f2;color:#a8a49c">—</td>
-                  <td style="padding:14px 16px;background:#f6f5f2;color:#a8a49c">—</td>
-                  <td style="padding:14px 16px;background:#f6f5f2;border-radius:0 12px 12px 0;text-align:right"><span style="display:inline-flex;padding:9px 18px;border-radius:9999px;background:#efece6;color:#a8a49c;font-size:12.5px;font-weight:600">Analyzing…</span></td>
-                </tr>
-                <tr>
-                  <td style="padding:14px 16px;background:#f6f5f2;border-radius:12px 0 0 12px"><span style="font-family:var(--font-heading);color:#14161a">Omega Group Ltd</span></td>
-                  <td style="padding:14px 16px;background:#f6f5f2;color:#5c5951">YA2025</td>
-                  <td style="padding:14px 16px;background:#f6f5f2"><span style="padding:4px 12px;border-radius:9999px;background:rgba(42,160,106,0.1);color:#2aa06a;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;border:1px solid rgba(42,160,106,0.3)">Generated</span></td>
-                  <td style="padding:14px 16px;background:#f6f5f2"><span style="color:#2aa06a;font-weight:500">Confirmed</span></td>
-                  <td style="padding:14px 16px;background:#f6f5f2;color:#5c5951">Prepared</td>
-                  <td style="padding:14px 16px;background:#f6f5f2;border-radius:0 12px 12px 0;text-align:right"><a href="#" style="display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:9999px;font-size:12.5px;font-weight:600;color:#fff;background:#494fdf;transition:background-color .2s">View / Download</a></td>
-                </tr>
+              <tbody id="returns-body">
+                <tr><td colspan="5" style="padding:22px 16px;color:#8a857c;text-align:center">Loading…</td></tr>
               </tbody>
             </table>
           </div>
@@ -210,9 +177,9 @@
 
         <div style="margin-top:36px;border-top:1px solid #e7e5e0;padding-top:20px">
           <div style="display:flex;flex-wrap:wrap;align-items:center;gap:28px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#8a857c;padding:8px 0">
-            <span>UPLOADED: <span style="color:#14161a">5</span></span>
-            <span>IN_REVIEW: <span style="color:#14161a">3</span></span>
-            <span>GENERATED: <span style="color:#2aa06a">32</span></span>
+            <span>SIGNED_IN: <span class="u-email" style="color:#14161a">—</span></span>
+            <span>FREE_RETURNS_LEFT: <span class="u-credits" style="color:#2aa06a">—</span></span>
+            <span>GENERATED: <span id="stat-returns-foot" style="color:#2aa06a">—</span></span>
           </div>
         </div>
 
@@ -223,12 +190,53 @@
 <script>
 (function(){
   var banners=document.querySelectorAll('[data-banner]'),dots=document.querySelectorAll('[data-dot]'),i=0;
-  if(!banners.length)return;
-  setInterval(function(){
+  if(banners.length) setInterval(function(){
     i=(i+1)%banners.length;
     banners.forEach(function(b,x){b.style.opacity=x===i?'1':'0';});
     dots.forEach(function(d,x){d.style.width=x===i?'32px':'8px';d.style.background=x===i?'#fff':'rgba(255,255,255,0.4)';});
   },5000);
+})();
+
+// ---- real account data ----
+(function(){
+  var esc=function(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');};
+  var eur=function(n){return Number(n).toLocaleString('en-MT',{minimumFractionDigits:2,maximumFractionDigits:2});};
+  var setAll=function(sel,val){document.querySelectorAll(sel).forEach(function(e){e.textContent=val;});};
+
+  fetch('/api/me').then(function(r){return r.ok?r.json():null;}).then(function(me){
+    if(!me){ location.href='/login'; return; }
+    setAll('.u-email', me.email);
+    setAll('.u-name', me.firm || me.email.split('@')[0]);
+    setAll('.u-credits', me.credits);
+    var f=document.getElementById('stat-credits'); if(f) f.textContent=me.credits;
+    var fm=document.getElementById('stat-firm'); if(fm) fm.textContent=me.firm||'—';
+  });
+
+  fetch('/api/returns').then(function(r){return r.ok?r.json():{returns:[]};}).then(function(d){
+    var rows=d.returns||[];
+    var sr=document.getElementById('stat-returns'); if(sr) sr.textContent=rows.length;
+    var srf=document.getElementById('stat-returns-foot'); if(srf) srf.textContent=rows.length;
+    var tb=document.getElementById('returns-body'); if(!tb) return;
+    if(!rows.length){ tb.innerHTML='<tr><td colspan="5" style="padding:26px 16px;color:#8a857c;text-align:center">No returns yet — <a href="/new-return" style="color:#494fdf;font-weight:600">start your first one</a>.</td></tr>'; return; }
+    var cell='padding:14px 16px;background:#f6f5f2';
+    tb.innerHTML=rows.map(function(r){
+      var date=new Date(r.createdAt).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+      return '<tr>'
+        +'<td style="'+cell+';border-radius:12px 0 0 12px"><span style="font-family:var(--font-heading);color:#14161a">'+esc(r.clientName||'Client')+'</span></td>'
+        +'<td style="'+cell+';color:#5c5951">'+esc(r.ya||'—')+'</td>'
+        +'<td style="'+cell+';text-align:right;font-family:\'JetBrains Mono\',monospace;color:#14161a">'+eur(r.taxCharge)+'</td>'
+        +'<td style="'+cell+';color:#5c5951">'+esc(date)+'</td>'
+        +'<td style="'+cell+';border-radius:0 12px 12px 0;text-align:right"><a href="/api/returns/'+encodeURIComponent(r.id)+'/return.xlsx" style="display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:9999px;font-size:12.5px;font-weight:600;color:#fff;background:#494fdf">Download .xlsx</a></td>'
+        +'</tr>';
+    }).join('');
+  });
+
+  document.querySelectorAll('.logout-link').forEach(function(a){
+    a.addEventListener('click', function(e){
+      e.preventDefault();
+      fetch('/api/logout',{method:'POST'}).finally(function(){ location.href='/login'; });
+    });
+  });
 })();
 </script>
 </body>
