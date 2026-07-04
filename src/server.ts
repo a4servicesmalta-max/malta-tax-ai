@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import type { EtbAccount, MappingProfile, MappingRule } from './domain';
 import { parseEtb } from './etb-parser';
-import { extractFsFigures, tieCheck } from './fs-tie-check';
+import { extractFsFiguresAny, tieCheck, type FsFigures } from './fs-tie-check';
 import {
   readPriorReturn,
   priorYearCrossCheck,
@@ -37,15 +37,20 @@ import {
   bootstrapAdmin,
 } from './accounts';
 import { saveReturn, listReturns, findReturn, returnFilePath } from './store';
+import { readTemplateCodes, codeKeySet, type TemplateCode } from './template-codes';
+import { readCfrValues } from './template-reader';
 
 interface Session {
   accounts: EtbAccount[];
   warnings: string[];
   template: Buffer;
+  /** Data-entry code rows that exist in the uploaded template (mapping is constrained to these). */
+  templateCodes: TemplateCode[];
+  codeKeys: Set<string>;
   prior?: { codes: Set<number> };
   priorBuffer?: Buffer;
   priorReview?: PriorReturnReview;
-  fsFigures?: ReturnType<typeof extractFsFigures>;
+  fsFigures?: FsFigures;
   output?: { xlsx: Buffer; summary: string };
 }
 
@@ -86,10 +91,19 @@ export function createApp() {
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 60 * 1024 * 1024 },
-    // Only spreadsheet inputs are ever expected — reject anything else early.
+    // ETB/template/prior must be spreadsheets (the template IS a spreadsheet
+    // and the ETB needs tabular data). Financial statements are advisory-only
+    // input, so accept whatever firms actually have — mainly PDFs.
     fileFilter: (_req, file, cb) => {
-      if (/\.(xlsx|xls|xlsm)$/i.test(file.originalname)) return cb(null, true);
-      cb(new Error(`Unsupported file type "${file.originalname}" — upload .xlsx, .xls or .xlsm`));
+      const name = file.originalname || '';
+      if (file.fieldname === 'fs') {
+        if (/\.(pdf|xlsx|xls|xlsm|csv|txt|docx?|odt|ods)$/i.test(name)) return cb(null, true);
+        return cb(
+          new Error(`Unsupported financial statements file "${name}" — upload a PDF, Excel, Word or CSV file`)
+        );
+      }
+      if (/\.(xlsx|xls|xlsm)$/i.test(name)) return cb(null, true);
+      cb(new Error(`Unsupported file type "${name}" — upload .xlsx, .xls or .xlsm`));
     },
   });
   const sessions = new Map<string, Session>();
@@ -239,11 +253,31 @@ export function createApp() {
         const tplFile = files?.template?.[0];
         if (!etbFile || !tplFile) return res.status(400).json({ error: 'etb and template files are required' });
 
+        // Read the template's real data-entry rows FIRST — a wrong file here is
+        // the express route to a silently empty return.
+        const templateCodes = readTemplateCodes(tplFile.buffer);
+        if (templateCodes.length === 0) {
+          return res.status(400).json({
+            error:
+              'The template file does not look like a CfR e-return — no B_Sheet/Income code rows were found. Upload the official CfR corporate return template (.xlsx/.xlsm).',
+          });
+        }
+
         const parsed = parseEtb(etbFile.buffer);
         const warnings = [...parsed.warnings];
-        const session: Session = { accounts: parsed.accounts, warnings, template: tplFile.buffer };
+        const session: Session = {
+          accounts: parsed.accounts,
+          warnings,
+          template: tplFile.buffer,
+          templateCodes,
+          codeKeys: codeKeySet(templateCodes),
+        };
 
-        if (files?.fs?.[0]) session.fsFigures = extractFsFigures(files.fs[0].buffer);
+        if (files?.fs?.[0]) {
+          const fsRes = await extractFsFiguresAny(files.fs[0].buffer, files.fs[0].originalname || 'fs');
+          session.fsFigures = fsRes.figures;
+          if (fsRes.note) warnings.push(fsRes.note);
+        }
         let priorCodes: Set<number> | undefined;
         let priorReview: PriorReturnReview | undefined;
         if (files?.prior?.[0]) {
@@ -256,7 +290,10 @@ export function createApp() {
           session.prior = { codes: info.codes };
         }
 
-        const proposal = await proposeMappingAI(parsed.accounts, { priorYearCodes: priorCodes });
+        const proposal = await proposeMappingAI(parsed.accounts, {
+          priorYearCodes: priorCodes,
+          templateCodes,
+        });
         const interview = buildInterview(parsed.accounts, {
           hasPriorReturn: !!priorCodes,
           priorLossesBroughtForward: session.priorBuffer
@@ -281,12 +318,28 @@ export function createApp() {
           fsFigures: session.fsFigures ?? null,
           crossCheck,
           priorReview: priorReview ?? null,
+          // The UI constrains the CfR-code pickers to these real template rows.
+          templateCodes,
         });
       } catch (e) {
         res.status(400).json({ error: (e as Error).message });
       }
     }
   );
+
+  /**
+   * Every confirmed rule must target a code row that exists in THIS template —
+   * otherwise the write lands nowhere and that section of the return stays
+   * empty. Returns a user-actionable error string, or null when all valid.
+   */
+  const invalidRuleError = (session: Session, rules: MappingRule[]): string | null => {
+    const bad = (rules ?? []).filter(
+      (r) => typeof r.cfrCode === 'number' && !session.codeKeys.has(`${r.sheet}:${r.cfrCode}`)
+    );
+    if (!bad.length) return null;
+    const list = [...new Set(bad.map((r) => `${r.cfrCode} (${r.sheet})`))].slice(0, 12).join(', ');
+    return `These CfR codes are not lines on this template: ${list} — pick codes from the template's list before continuing.`;
+  };
 
   // The tax computation working paper — reviewed by the preparer BEFORE the
   // return is filled. Same deterministic inputs as /generate, no file writes.
@@ -299,6 +352,8 @@ export function createApp() {
         answers: Record<string, number>;
         excluded: string[];
       };
+      const badCode = invalidRuleError(session, rules ?? []);
+      if (badCode) return res.status(400).json({ error: badCode });
       const fill = applyMapping(
         session.accounts.filter((a) => !(excluded ?? []).includes(a.accountCode)),
         { rules: rules ?? [] }
@@ -326,6 +381,8 @@ export function createApp() {
         answers: Record<string, number>;
         excluded: string[];
       };
+      const badCode = invalidRuleError(session, rules ?? []);
+      if (badCode) return res.status(400).json({ error: badCode });
       const included = session.accounts.filter((a) => !(excluded ?? []).includes(a.accountCode));
       const fill = applyMapping(included, { rules: rules ?? [] });
       if (fill.unmappedAccounts.length) {
@@ -375,6 +432,9 @@ export function createApp() {
         }
       }
 
+      const badCode = invalidRuleError(session, rules ?? []);
+      if (badCode) return res.status(400).json({ error: badCode });
+
       const profile: MappingProfile = { rules: rules ?? [] };
       const fill = applyMapping(
         session.accounts.filter((a) => !(excluded ?? []).includes(a.accountCode)),
@@ -396,6 +456,37 @@ export function createApp() {
         }
       }
       const { buffer, unmatched } = await fillCfrReturn(session.template, fill.codeCells, directCells);
+      // Belt-and-braces: rules were validated against the template, so nothing
+      // may be unmatched. If it is, the output is incomplete — refuse to ship it.
+      if (unmatched.length) {
+        return res.status(400).json({
+          error: `Generation stopped: ${unmatched.length} value(s) had no matching row in the template (${unmatched
+            .map((u) => `${u.sheet}/${u.cfrCode}`)
+            .join(', ')}). Fix the mapping and try again.`,
+        });
+      }
+
+      // VERIFICATION PASS: re-read the workbook we just produced and confirm
+      // every mapped figure actually landed on its code row. A return only
+      // ships if 100% of intended writes are present and exact.
+      const written = await readCfrValues(buffer, ['B_Sheet', 'Income']);
+      const writtenByKey = new Map(written.map((w) => [`${w.sheet}:${w.cfrCode}`, w.value]));
+      const missing = fill.codeCells.filter((c) => {
+        const v = writtenByKey.get(`${c.sheet}:${c.cfrCode}`);
+        return v === null || v === undefined || Math.abs(v - c.amount) > 0.01;
+      });
+      if (missing.length) {
+        return res.status(500).json({
+          error: `Verification failed: ${missing.length} value(s) did not land in the generated file (${missing
+            .map((m) => `${m.sheet}/${m.cfrCode}`)
+            .join(', ')}). The return was NOT produced — please report this.`,
+        });
+      }
+      const verification = {
+        accountsIncluded: fill.applied.size,
+        codeRowsWritten: fill.codeCells.length,
+        allWritesVerified: true,
+      };
 
       const tie =
         session.fsFigures &&
@@ -459,7 +550,7 @@ export function createApp() {
         'Malta Tax AI — return generated',
         `A tax return was generated on tax.vacei.com:\n\n  Client: ${clientName || '(unnamed)'}\n  Year of assessment: ${yearOfAssessment || '(unspecified)'}\n  Net profit per accounts: ${netProfit.toFixed(2)}`
       );
-      res.json({ downloadReady: true, unmatched, tie: tie ?? null, returnId, credits: creditsLeft });
+      res.json({ downloadReady: true, unmatched, tie: tie ?? null, returnId, credits: creditsLeft, verification });
     } catch (e) {
       res.status(400).json({ error: (e as Error).message });
     }

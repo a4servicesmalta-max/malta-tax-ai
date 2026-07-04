@@ -95,8 +95,8 @@
             </div>
             <div style="border:2px dashed var(--line);border-radius:14px;background:#fff;padding:22px">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-family:var(--font-heading);font-size:15px">Financial statements</span><span class="mono" style="font-size:10px;color:#a8a49c;letter-spacing:0.06em">OPTIONAL</span></div>
-              <p style="font-size:13px;color:#8a857c;margin:0 0 12px">.xlsx, .xls</p>
-              <label style="display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:9999px;background:#f6f5f2;border:1px solid var(--line);font-size:13px;color:#3a3d40;cursor:pointer">Choose file<input id="f_fs" type="file" accept=".xlsx,.xls" style="display:none"></label>
+              <p style="font-size:13px;color:#8a857c;margin:0 0 12px">PDF, Excel, Word or CSV — PDF is fine</p>
+              <label style="display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:9999px;background:#f6f5f2;border:1px solid var(--line);font-size:13px;color:#3a3d40;cursor:pointer">Choose file<input id="f_fs" type="file" accept=".pdf,.xlsx,.xls,.xlsm,.csv,.txt,.doc,.docx,.odt,.ods" style="display:none"></label>
               <span id="lbl_fs" class="mono" style="display:block;margin-top:10px;font-size:11px;color:#a8a49c">No file chosen</span>
             </div>
             <div style="display:flex;flex-direction:column;gap:10px">
@@ -193,7 +193,7 @@
 </div>
 
 <script>
-let SESSION=null, ACCOUNTS=[], QUESTIONS=[], PRIOR_REVIEW=null, COMPUTED=false;
+let SESSION=null, ACCOUNTS=[], QUESTIONS=[], PRIOR_REVIEW=null, COMPUTED=false, TPL_CODES=[], TPL_KEYS=new Set();
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const eur=n=>Number(n).toLocaleString('en-MT',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -250,6 +250,8 @@ $('analyseBtn').addEventListener('click', async ()=>{
   if(!res.ok){ $('uploadMsgs').innerHTML=`<div class="callout c-err">${esc(data.error||'Upload failed.')}</div>`; return; }
   $('uploadMsgs').innerHTML='';
   SESSION=data.sessionId; ACCOUNTS=data.accounts||[]; QUESTIONS=(data.interview&&data.interview.questions)||[]; PRIOR_REVIEW=data.priorReview||null; COMPUTED=false;
+  TPL_CODES=data.templateCodes||[]; TPL_KEYS=new Set(TPL_CODES.map(c=>c.sheet+':'+c.code));
+  buildCodeDatalists();
   $('proposalSource').textContent=(data.proposal&&data.proposal.source==='ai')?'AI-proposed — confirm each':'heuristic proposal — confirm each';
   renderPriorReview();
   renderCrossCheck(data.crossCheck);
@@ -276,20 +278,36 @@ function renderCrossCheck(cc){
     ? `<div class="callout c-warn">Prior-year cross-check: ${cc.mismatches.length} of ${cc.checkedCodes} codes do not reproduce last year's filed figures — review those mappings. ${cc.mismatches.map(m=>`code ${m.cfrCode}: filed €${m.priorReturnValue} vs mapped €${m.mappedPyValue}`).join('; ')}</div>`
     : `<div class="callout c-ok">Prior-year cross-check passed: mapped PY balances reproduce the filed prior return (${cc.checkedCodes} codes).</div>`;
 }
+function buildCodeDatalists(){
+  for(const sheet of ['B_Sheet','Income']){
+    let dl=document.getElementById('codes-'+sheet);
+    if(!dl){ dl=document.createElement('datalist'); dl.id='codes-'+sheet; document.body.appendChild(dl); }
+    dl.innerHTML=TPL_CODES.filter(c=>c.sheet===sheet)
+      .map(c=>`<option value="${c.code}">${esc(String(c.code)+(c.label?' — '+c.label:''))}</option>`).join('');
+  }
+}
 function renderMapping(rules){
   const byCode=Object.fromEntries(rules.map(r=>[r.ledgerCode,r]));
   const cell='padding:10px 12px;background:#f6f5f2';
   $('mapBody').innerHTML=ACCOUNTS.map(a=>{
     const p=byCode[a.accountCode];
+    const sheet=p?p.sheet:'Income';
     return `<tr data-code="${esc(a.accountCode)}">
       <td class="mono" style="${cell};border-radius:8px 0 0 8px">${esc(a.accountCode)}</td>
       <td style="${cell}">${esc(a.accountName)}</td>
       <td class="mono" style="${cell};text-align:right">${eur(a.cyBalance)}</td>
-      <td style="${cell}"><input type="number" class="cfr mono" value="${p?p.cfrCode:''}" style="width:88px;padding:5px 7px;border-radius:7px;border:1px solid #ddd9d2;background:#fff;font-size:12px"></td>
-      <td style="${cell}"><select class="sheet" style="padding:5px 6px;border-radius:7px;border:1px solid #ddd9d2;background:#fff;font-size:12px"><option${p&&p.sheet==='B_Sheet'?' selected':''}>B_Sheet</option><option${p&&p.sheet==='Income'?' selected':''}>Income</option></select></td>
+      <td style="${cell}"><input type="text" inputmode="numeric" class="cfr mono" list="codes-${sheet}" value="${p?p.cfrCode:''}" placeholder="pick…" style="width:98px;padding:5px 7px;border-radius:7px;border:1px solid #ddd9d2;background:#fff;font-size:12px"></td>
+      <td style="${cell}"><select class="sheet" style="padding:5px 6px;border-radius:7px;border:1px solid #ddd9d2;background:#fff;font-size:12px"><option${sheet==='B_Sheet'?' selected':''}>B_Sheet</option><option${sheet==='Income'?' selected':''}>Income</option></select></td>
       <td style="${cell}">${badge(p?p.confidence:null)}</td>
       <td style="${cell};border-radius:0 8px 8px 0"><input type="checkbox" class="excl"></td></tr>`;
   }).join('');
+  // keep each row's code picker scoped to its sheet's valid codes
+  $('mapBody').addEventListener('change',e=>{
+    if(e.target.classList.contains('sheet')){
+      const tr=e.target.closest('tr');
+      tr.querySelector('.cfr').setAttribute('list','codes-'+e.target.value);
+    }
+  });
   $('mapBody').addEventListener('input',invalidate);
   $('mapBody').addEventListener('change',invalidate);
 }
@@ -326,11 +344,30 @@ function invalidate(){
   refreshGate();
 }
 function refreshGate(){
-  let ok=true;
+  let ok=true, invalidCodes=0, unmappedRows=0;
   for(const tr of document.querySelectorAll('#mapBody tr')){
-    const valid=tr.querySelector('.excl').checked || tr.querySelector('.cfr').value.trim()!=='';
+    const excl=tr.querySelector('.excl').checked;
+    const inp=tr.querySelector('.cfr');
+    const code=inp.value.trim();
+    const sheet=tr.querySelector('.sheet').value;
+    const known=code!=='' && TPL_KEYS.has(sheet+':'+Number(code));
+    const valid=excl || known;
     tr.style.opacity=valid?'1':'0.55';
+    // A typed code that is NOT a line on this template gets a hard red flag —
+    // it would leave that section of the return empty.
+    inp.style.borderColor=(!excl && code!=='' && !known)?'#d1493a':'#ddd9d2';
+    if(!excl && code!=='' && !known) invalidCodes++;
+    if(!excl && code==='') unmappedRows++;
     if(!valid) ok=false;
+  }
+  const note=$('mapNote');
+  if(note){
+    note.textContent = invalidCodes
+      ? `${invalidCodes} row(s) use codes that are not lines on this template (red) — pick a code from the list.`
+      : unmappedRows
+        ? `${unmappedRows} row(s) still unmapped — map or exclude each one to continue.`
+        : 'All rows valid — every code exists on this template.';
+    note.style.color = invalidCodes ? '#b23a2c' : unmappedRows ? '#9a6700' : '#1f7a51';
   }
   const priorErr=(PRIOR_REVIEW&&PRIOR_REVIEW.findings||[]).some(f=>f.severity==='error');
   if(priorErr){ const a=$('priorAck'); if(!a||!a.checked) ok=false; }
@@ -392,6 +429,9 @@ $('generateBtn').addEventListener('click', async ()=>{
   let m='';
   if(data.unmatched&&data.unmatched.length) m+=`<div class="callout c-warn">Codes with no row in this template (NOT written — enter manually): ${data.unmatched.map(u=>`${u.sheet}/${u.cfrCode}`).join(', ')}</div>`;
   if(data.tie&&!data.tie.ok) m+=data.tie.issues.map(i=>`<div class="callout c-warn">${esc(i)}</div>`).join('');
+  if(data.verification&&data.verification.allWritesVerified){
+    m+=`<div class="callout c-ok">✓ Verified before download: all ${data.verification.codeRowsWritten} figures from ${data.verification.accountsIncluded} mapped accounts were written to the return and re-checked in the generated file.</div>`;
+  }
   $('genMsgs').innerHTML=m;
   // Prefer the persisted, streamed download (survives restart + avoids the
   // large-buffer proxy 503); fall back to the in-memory session route.

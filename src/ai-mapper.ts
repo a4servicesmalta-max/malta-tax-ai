@@ -7,6 +7,7 @@
 import type { EtbAccount, ProposedRule } from './domain';
 import { proposeMapping, type ProposalContext } from './mapping';
 import { isAiConfigured, callAnthropic, type AiAuthOptions } from './ai-auth';
+import { codeKeySet, type TemplateCode } from './template-codes';
 
 /** Max-first / API-key-fallback auth (see ai-auth), plus an optional model override. */
 export interface AiMapperOptions extends AiAuthOptions {
@@ -29,10 +30,24 @@ export function sanitizeName(name: string): string {
 }
 
 const SYSTEM = `You map Maltese company ledger accounts to official CfR corporate tax return account codes
-(1000/2000/3000-series balance sheet on sheet "B_Sheet", 5000/6000/7000-series P&L on sheet "Income").
+(balance sheet on sheet "B_Sheet", profit & loss on sheet "Income").
+When a VALID CODES list is provided, you MUST use only codes from that list — they are the data-entry
+rows that exist on this client's template; any other code cannot be written and would leave the return
+incomplete. Map every account to the best-fitting code; prefer the most specific line over a catch-all.
 Reply with JSON only: {"rules":[{"ledgerCode":string,"cfrCode":number,"sheet":"B_Sheet"|"Income","confidence":number}]}
-Omit any account you are not confident about — a human tax preparer reviews and completes the mapping.
+Omit an account only when nothing on the list plausibly fits — a human preparer reviews everything.
 Never invent amounts; you only classify accounts.`;
+
+/** Compact "VALID CODES" section for the prompt, grouped per sheet. */
+function templateCodesPrompt(codes: TemplateCode[]): string {
+  const bySheet: Record<string, string[]> = {};
+  for (const c of codes) {
+    (bySheet[c.sheet] ??= []).push(`${c.code}${c.label ? ` = ${sanitizeName(c.label)}` : ''}`);
+  }
+  return Object.entries(bySheet)
+    .map(([sheet, lines]) => `${sheet}:\n${lines.join('\n')}`)
+    .join('\n\n');
+}
 
 export async function proposeMappingAI(
   accounts: EtbAccount[],
@@ -46,6 +61,9 @@ export async function proposeMappingAI(
     const priorNote = ctx.priorYearCodes?.size
       ? `Codes used on this client's prior-year return (prefer these where sensible): ${[...ctx.priorYearCodes].join(', ')}.`
       : '';
+    const codesNote = ctx.templateCodes?.length
+      ? `VALID CODES on this template (use ONLY these):\n${templateCodesPrompt(ctx.templateCodes)}\n\n`
+      : '';
     const res = await callAnthropic(
       {
         model: opts.model ?? process.env.ANTHROPIC_MODEL ?? 'claude-fable-5',
@@ -56,7 +74,7 @@ export async function proposeMappingAI(
         messages: [
           {
             role: 'user',
-            content: `${priorNote}\nAccounts:\n${accounts
+            content: `${codesNote}${priorNote}\nAccounts:\n${accounts
               .map((a) => `${a.accountCode}\t${sanitizeName(a.accountName)}\t${a.cyBalance >= 0 ? 'Dr' : 'Cr'}`)
               .join('\n')}`,
           },
@@ -86,6 +104,9 @@ export async function proposeMappingAI(
     // Safe: the filter below validates every field of every rule.
     const parsed = { rules: ruleObjs as ProposedRule[] };
     const knownLedgerCodes = new Set(accounts.map((a) => a.accountCode));
+    // Template-aware hard filter: a hallucinated code would land nowhere and
+    // leave a section of the return empty — drop it so the row shows unmapped.
+    const validKeys = ctx.templateCodes?.length ? codeKeySet(ctx.templateCodes) : null;
     const rules: ProposedRule[] = parsed.rules.filter(
       (r: ProposedRule) =>
         typeof r.ledgerCode === 'string' &&
@@ -95,6 +116,7 @@ export async function proposeMappingAI(
         Number.isInteger(r.cfrCode) &&
         r.cfrCode > 0 &&
         (r.sheet === 'B_Sheet' || r.sheet === 'Income') &&
+        (!validKeys || validKeys.has(`${r.sheet}:${r.cfrCode}`)) &&
         typeof r.confidence === 'number' &&
         Number.isFinite(r.confidence) &&
         r.confidence >= 0 &&

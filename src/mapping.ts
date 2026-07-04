@@ -138,17 +138,29 @@ const PROPOSALS: Array<{ kw: RegExp; cfrCode: number; sheet: CfrSheet; confidenc
 export interface ProposalContext {
   /** CfR codes present on the client's prior-year return — small confidence boost. */
   priorYearCodes?: Set<number>;
+  /**
+   * The data-entry code rows that actually exist in the uploaded template.
+   * When given, proposals with codes not on the template are DROPPED (the
+   * account shows as unmapped for the preparer) — a visibly unmapped row is
+   * honest; a write to a non-existent row silently leaves that section of the
+   * return empty.
+   */
+  templateCodes?: import('./template-codes').TemplateCode[];
 }
 
 export function proposeMapping(
   accounts: EtbAccount[],
   ctx: ProposalContext = {}
 ): { rules: ProposedRule[] } {
+  const validKeys = ctx.templateCodes
+    ? new Set(ctx.templateCodes.map((c) => `${c.sheet}:${c.code}`))
+    : null;
   const rules: ProposedRule[] = [];
   for (const acc of accounts) {
     const name = (acc.accountName || '').toLowerCase();
     const hit = PROPOSALS.find((p) => p.kw.test(name));
     if (!hit) continue;
+    if (validKeys && !validKeys.has(`${hit.sheet}:${hit.cfrCode}`)) continue;
     const boost = ctx.priorYearCodes?.has(hit.cfrCode) ? 0.05 : 0;
     rules.push({
       ledgerCode: acc.accountCode,
