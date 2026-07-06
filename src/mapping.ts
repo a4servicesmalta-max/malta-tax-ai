@@ -231,7 +231,43 @@ const SECTION_TOTALS: Array<{ sheet: CfrSheet; code: number; lo: number; hi: num
 export const TOTAL_CODE_KEYS = new Set([
   ...SECTION_TOTALS.map((t) => `${t.sheet}:${t.code}`),
   'Income:7050',
+  'Income:7501', // retained earnings b/f (memo row, not a P&L item)
+  'Income:7600', // retained earnings c/f
 ]);
+
+/**
+ * Closing entry: filed returns carry CLOSING retained earnings on the balance
+ * sheet (3905 includes the year's result) plus the RE reconciliation rows
+ * (7501 b/f, 7600 c/f) as typed inputs. A pre-closing ETB leaves its B_Sheet
+ * accounts netting to the year's result instead of zero — verified on a real
+ * filing (C.E.E.: filed 3905 = opening −455,459 + profit −403,010 = −858,469
+ * exactly). Applied ONLY when the mapped B_Sheet imbalance equals the P&L
+ * result (a post-closing ETB, e.g. audit finals, nets to zero and is left
+ * alone). Pure arithmetic — the standard closing journal, no judgment.
+ */
+export function applyClosingEntry(codeCells: CfrCodeCell[], templateKeys: Set<string>): CfrCodeCell[] {
+  const bsSum = codeCells.filter((c) => c.sheet === 'B_Sheet').reduce((a, c) => a + c.amount, 0);
+  const incSum = codeCells.filter((c) => c.sheet === 'Income').reduce((a, c) => a + c.amount, 0);
+  // Pre-closing signature: B_Sheet off by exactly the P&L result. The residual
+  // tolerance allows small client-side rounding in the ETB itself (a real file
+  // carried a EUR 2 imbalance on an 18.7M balance sheet).
+  if (Math.abs(bsSum) <= 1 || Math.abs(bsSum + incSum) > 5) return codeCells;
+  const out = codeCells.map((c) => ({ ...c }));
+  const re = out.find((c) => c.sheet === 'B_Sheet' && c.cfrCode === 3905);
+  const preClosingRe = re ? re.amount : 0;
+  if (re) re.amount = round2(re.amount - bsSum);
+  else if (templateKeys.has('B_Sheet:3905')) out.push({ sheet: 'B_Sheet', cfrCode: 3905, amount: round2(-bsSum) });
+  else return codeCells; // nowhere to post — leave untouched, imbalance warning stands
+  // RE reconciliation rows (typed inputs on the Income sheet).
+  const has = (k: string) => out.some((c) => `${c.sheet}:${c.cfrCode}` === k);
+  if (templateKeys.has('Income:7501') && !has('Income:7501') && Math.abs(preClosingRe) > 0.005) {
+    out.push({ sheet: 'Income', cfrCode: 7501, amount: round2(preClosingRe) });
+  }
+  if (templateKeys.has('Income:7600') && !has('Income:7600')) {
+    out.push({ sheet: 'Income', cfrCode: 7600, amount: round2(preClosingRe - bsSum) });
+  }
+  return out;
+}
 
 /**
  * Derive typed section totals from the mapped lines. Only totals whose row

@@ -21,7 +21,7 @@ import {
   type PriorReturnReview,
 } from './prior-return';
 import { proposeMappingAI } from './ai-mapper';
-import { applyMapping, netProfitFromMapping, deriveSectionTotals, TOTAL_CODE_KEYS, sheetAllowed } from './mapping';
+import { applyMapping, netProfitFromMapping, deriveSectionTotals, applyClosingEntry, TOTAL_CODE_KEYS, sheetAllowed } from './mapping';
 import { recallMapping, rememberMapping } from './mapping-memory';
 import { buildInterview, fillsFromAnswers } from './interview';
 import { computeTax } from './tax-computation';
@@ -606,7 +606,12 @@ export function createApp() {
           .filter((v) => !v.computed && TOTAL_CODE_KEYS.has(`${v.sheet}:${v.cfrCode}`))
           .map((v) => `${v.sheet}:${v.cfrCode}`)
       );
-      const allCells = [...fill.codeCells, ...deriveSectionTotals(fill.codeCells, writableTotals)];
+      // Closing entry first (pre-closing ETBs: 3905 absorbs the year's result,
+      // RE b/f and c/f rows 7501/7600 are filled), then section totals over the
+      // closed cells so TOTAL EQUITY includes the adjusted retained earnings.
+      const roundedCells = fill.codeCells.map((c) => ({ ...c, amount: Math.round(c.amount) }));
+      const closedCells = applyClosingEntry(roundedCells, session.codeKeys);
+      const allCells = [...closedCells, ...deriveSectionTotals(closedCells, writableTotals)];
       const { buffer, unmatched } = await fillCfrReturn(session.template, allCells, directCells);
       // Belt-and-braces: rules were validated against the template, so nothing
       // may be unmatched. If it is, the output is incomplete — refuse to ship it.
@@ -640,8 +645,10 @@ export function createApp() {
         allWritesVerified: true,
       };
 
+      // Tie sums use the CLOSED cells (FS equity includes the year's result);
+      // Income memo rows (7501/7600) sit outside every tie range used below.
       const sumCells = (sheet: string, lo: number, hi: number) =>
-        fill.codeCells.filter((c) => c.sheet === sheet && c.cfrCode >= lo && c.cfrCode <= hi).reduce((a, c) => a + c.amount, 0);
+        closedCells.filter((c) => c.sheet === sheet && c.cfrCode >= lo && c.cfrCode <= hi).reduce((a, c) => a + c.amount, 0);
       const tie =
         session.fsFigures &&
         tieCheck(session.fsFigures, {
