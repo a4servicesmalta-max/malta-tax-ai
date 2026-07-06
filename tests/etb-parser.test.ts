@@ -117,6 +117,22 @@ describe('parseEtb', () => {
     ]);
   });
 
+  it('does not drop real accounts when trailing "Grouping" columns contain header-like words', () => {
+    // A4 audit-file ETBs carry grouping helper columns to the right ("Current
+    // Assets", "BS", ...) whose text matched header keywords and made genuine
+    // account rows look like repeated headers — silently dropping them.
+    const buf = syntheticEtbXlsx([
+      ['MSM Co', null, null, null, null, null, null, null, null, null, null],
+      ['A/c', 'Account Description', 'Client TB', 'Adjustments', 2025, 'P/B', 'P/L', 'B/S', 2024, 'Grouping 1', 'Grouping 2'],
+      ['25010400', "Shareholder's Loan Account", 554408, 0, 554408, 'B', 0, 554408, 554408, 'Current Assets', 'Other Receivables'],
+      ['35010100', 'Intercompany Sales', -74165, 0, -74165, 'P', -74165, 0, -74165, 'Revenue', 'Sales'],
+    ]);
+    const res = parseEtb(buf);
+    expect(res.accounts.map((a) => a.accountCode)).toEqual(['25010400', '35010100']);
+    expect(res.accounts.map((a) => a.statement)).toEqual(['BS', 'PL']);
+    expect(res.warnings.some((w) => /repeated header/.test(w))).toBe(false);
+  });
+
   it('rejects a file where no header row can be found', () => {
     const buf = syntheticEtbXlsx([['just', 'some', 'text'], ['more', 'noise', 1]]);
     expect(() => parseEtb(buf)).toThrow(/could not locate an ETB header row/i);

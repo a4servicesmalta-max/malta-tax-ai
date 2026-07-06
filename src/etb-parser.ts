@@ -251,6 +251,13 @@ export function parseEtb(buffer: Buffer): ParsedEtb {
 
   const warnings: string[] = [];
   const accounts: EtbAccount[] = [];
+  // The real table spans columns up to the rightmost detected column. Audit-file
+  // ETBs carry extra "Grouping" helper columns to the RIGHT (e.g. "Current
+  // Assets", "BS") whose text matches header keywords — restricting the
+  // repeated-header check to the data span stops those from making a genuine
+  // account row look like a header (which silently dropped accounts and
+  // unbalanced the ETB, e.g. MSM Holding's shareholder-loan line).
+  const maxDataCol = Math.max(...best.cols.keys());
   for (let r = best.row + 1; r < rows.length; r++) {
     const row = rows[r] ?? [];
     let name = cName != null ? String(row[cName] ?? '').trim() : '';
@@ -259,7 +266,7 @@ export function parseEtb(buffer: Buffer): ParsedEtb {
     if (!name && !code) continue;
     // Repeated header rows inside the data region (title/units duplicates)
     // would otherwise parse as fake accounts — skip them LOUDLY.
-    if (classifyRow(row).isHeader) {
+    if (classifyRow(row.slice(0, maxDataCol + 1)).isHeader) {
       warnings.push(`Row ${r + 1} ("${name || code}") skipped as repeated header row.`);
       continue;
     }
