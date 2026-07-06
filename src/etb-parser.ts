@@ -328,6 +328,25 @@ export function parseEtb(buffer: Buffer): ParsedEtb {
   // vetoes are worse than none. Statement routing comes only from explicit
   // ETB columns; AI variance on statement-less TBs is caught by the FS tie.
 
+  // Sanity guard on the split-column routing: a real company populates BOTH
+  // statements. Some older audit files carry every value in one split column
+  // (MSM IP 2021: everything in "Profit & Loss") — trusting that would veto
+  // the entire other statement. If either side gets fewer than 15% of routed
+  // accounts, the columns are unreliable: drop routing, let mapping decide.
+  const routed = accounts.filter((a) => a.statement);
+  // Only meaningful at real-ETB scale; tiny TBs legitimately skew one-sided.
+  if (routed.length >= 10) {
+    const pl = routed.filter((a) => a.statement === 'PL').length;
+    const bs = routed.length - pl;
+    const floor = Math.max(2, Math.floor(routed.length * 0.15));
+    if (pl < floor || bs < floor) {
+      for (const a of accounts) delete a.statement;
+      warnings.push(
+        `Statement (P&L/Balance Sheet) columns look unreliable (${pl} P&L vs ${bs} balance-sheet) — routing ignored; review the mapping statement placement.`
+      );
+    }
+  }
+
   // Zero-balance accounts (this year AND last) don't belong on the return —
   // dropping them here keeps them out of mapping and the unmapped list.
   // (Tester-reported: zero rows were imported and demanded manual attention.)
