@@ -66,6 +66,15 @@ including three consecutive years of the same client (Penza).**
 4. In-memory sessions died on redeploy mid-return (fixed: disk persistence + rehydration).
 5. Three real firm ETB layouts failed to parse at upload (fixed: audit-workbook/Sage/year-column support; 22/22 vintage returns parse).
 
+## E2E ship-readiness sweep (final gate — PASSED)
+
+All 12 pairs through the REAL server (upload -> parse -> propose -> generate
+-> post-generate verification): **12/12 PASS, 0 unmapped accounts, 100% of
+intended figures re-verified in every produced workbook** (474 code rows
+across 471 accounts). Reproduce with `npx tsx scripts/e2e-sweep.ts`.
+Line-match after the closing-entry + whole-euro work: corpus 61.7%+, best
+clients 78-92%; 7 client-years tie the filed profit and balance sheet exactly.
+
 ## Safety nets in production
 
 - Post-generate **verification pass**: every intended figure re-read from the produced workbook; the return is not delivered unless 100% land.
