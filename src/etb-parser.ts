@@ -270,6 +270,11 @@ export function parseEtb(buffer: Buffer): ParsedEtb {
       warnings.push(`Row ${r + 1} ("${name || code}") skipped as repeated header row.`);
       continue;
     }
+    // QuickBooks parent-account rows export as "Name (HEADER)" — the balance
+    // is REAL (transactions posted directly to the parent; the ETB balances
+    // with them included), only the suffix is noise that stops name-based
+    // mapping. Strip it. (Freehour: 4 such rows = the entire profit gap.)
+    name = name.replace(/\s*\(header\)\s*$/i, '').trim();
     // Combined "0002000 BOV Bank" cells (no separate code column): split so the
     // code is usable for mapping rules and the name for interview triggers.
     if (!code) {

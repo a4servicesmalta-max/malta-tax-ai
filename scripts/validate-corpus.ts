@@ -40,6 +40,10 @@ export interface PairResult {
    * since the template computes the 35% charge from these.
    */
   outcome: { netProfit: OutcomeTie; totalAssets: OutcomeTie };
+  /** Accounts the proposal left unmapped — production REFUSES to generate
+   *  until the preparer maps or excludes each one, so these are flagged
+   *  workload, not silent output defects. */
+  unmapped: { count: number; sum: number; names: string[] };
 }
 
 export async function validatePair(
@@ -124,6 +128,11 @@ export async function validatePair(
     pct: filed.length ? Math.round((1000 * reproduced) / filed.length) / 10 : 0,
     misses,
     outcome,
+    unmapped: {
+      count: mapped.unmappedAccounts.length,
+      sum: mapped.unmappedAccounts.reduce((a, u) => a + u.balance, 0),
+      names: mapped.unmappedAccounts.map((u) => `${u.code} ${u.name} (${u.balance})`),
+    },
   };
 }
 
@@ -160,6 +169,11 @@ async function main() {
     console.log(
       `\n=== ${r.label} ===\n accounts=${r.accounts} proposal=${r.proposalSource} | reproduced ${r.reproduced}/${r.filedInputLines} filed input lines (${r.pct}%)`
     );
+    if (r.unmapped.count > 0) {
+      console.log(
+        ` UNMAPPED (production blocks generate until preparer maps these): ${r.unmapped.count} account(s), balance sum ${r.unmapped.sum.toFixed(2)} — ${r.unmapped.names.join('; ')}`
+      );
+    }
     const fmtTie = (name: string, t: OutcomeTie) =>
       ` OUTCOME ${name}: filed ${t.filed ?? '—'} vs generated ${t.generated} → ${
         t.tied === null ? 'n/a' : t.tied ? 'TIED ✔' : 'DIFFERS ✘'
