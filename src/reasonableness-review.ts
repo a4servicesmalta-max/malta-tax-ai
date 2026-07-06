@@ -15,6 +15,7 @@ import type { EtbAccount } from './domain';
 import { sanitizeName } from './ai-mapper';
 import { isAiConfigured, callAnthropic, type AiAuthOptions } from './ai-auth';
 import type { TaxComputation } from './tax-computation';
+import { statutoryContext } from './tax-law';
 
 export interface ReviewFinding {
   severity: 'warning' | 'info';
@@ -41,6 +42,9 @@ confirmed tax-adjustment answers. Raise the points a reviewer would question bef
   fines/penalties, donations, entertainment not adjusted);
 - capital allowances or losses that look inconsistent with the accounts;
 - unusually large or out-of-place items, or a mapping that looks wrong.
+When STATUTE excerpts from the Income Tax Act (Cap. 123) are provided, ground each point in the Act and
+cite the article (e.g. "Art. 14(1)(a)") where relevant — do not cite provisions that are not in the excerpts
+unless you are certain of them.
 Reply with JSON only: {"findings":[{"severity":"warning"|"info","message":string}]}
 "warning" = a likely error or omission the preparer should fix; "info" = worth confirming but may be intentional.
 Do NOT compute, guess, or propose any amount to enter on the return — you only raise review points for a human
@@ -92,7 +96,12 @@ export async function reasonablenessReview(
               accounts
                 .map((a) => `${a.accountCode}\t${sanitizeName(a.accountName)}\t${a.cyBalance >= 0 ? 'Dr' : 'Cr'} ${eur(Math.abs(a.cyBalance))}`)
                 .join('\n') +
-              `\n\nDraft tax computation:\n${computationLines(computation)}`,
+              `\n\nDraft tax computation:\n${computationLines(computation)}` +
+              // Ground the review in the actual statute: core computation articles
+              // plus articles matched to this client's account names.
+              `\n\n${statutoryContext(
+                accounts.flatMap((a) => sanitizeName(a.accountName).toLowerCase().split(/[^a-z]+/)).filter((w) => w.length > 5)
+              )}`,
           },
         ],
       },

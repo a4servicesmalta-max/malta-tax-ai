@@ -29,10 +29,24 @@ export interface PairResult {
   misses: Array<{ sheet: string; code: number; filed: number; generated: number | null }>;
 }
 
-export async function validatePair(etbBuf: Buffer, filedBuf: Buffer, label: string): Promise<PairResult> {
+export async function validatePair(
+  etbBuf: Buffer,
+  filedBuf: Buffer,
+  label: string,
+  priorBuf?: Buffer
+): Promise<PairResult> {
   const codes = readTemplateCodes(filedBuf);
   const etb = parseEtb(etbBuf);
-  const proposal = await proposeMappingAI(etb.accounts, { templateCodes: codes });
+  // Production behavior for repeat clients: prime with the codes populated on
+  // the client's prior-year return.
+  let priorYearCodes: Set<number> | undefined;
+  if (priorBuf) {
+    const priorVals = (await readCfrValues(priorBuf, ['B_Sheet', 'Income'])).filter(
+      (v) => v.value !== null && !v.computed && Math.abs(v.value as number) > 0.5
+    );
+    priorYearCodes = new Set(priorVals.map((v) => v.cfrCode));
+  }
+  const proposal = await proposeMappingAI(etb.accounts, { templateCodes: codes, priorYearCodes });
   const mapped = applyMapping(etb.accounts, { rules: proposal.rules });
   const byKey = new Map(mapped.codeCells.map((c) => [`${c.sheet}:${c.cfrCode}`, c.amount]));
 
@@ -63,13 +77,17 @@ export async function validatePair(etbBuf: Buffer, filedBuf: Buffer, label: stri
 
 async function main() {
   const args = process.argv.slice(2);
-  const pairs: Array<[string, string, string]> = [];
+  // --pair <etb> <filed> [--prior <priorReturn>]  (prior applies to the preceding pair)
+  const pairs: Array<[string, string, string, string | null]> = [];
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--pair') {
       const etb = args[i + 1];
       const filed = args[i + 2];
-      pairs.push([etb, filed, (filed.split(/[\\/]/).pop() || filed).replace(/\.xlsx$/i, '')]);
+      pairs.push([etb, filed, (filed.split(/[\\/]/).pop() || filed).replace(/\.xlsx$/i, ''), null]);
       i += 2;
+    } else if (args[i] === '--prior' && pairs.length) {
+      pairs[pairs.length - 1][3] = args[i + 1];
+      i += 1;
     }
   }
   if (!pairs.length) {
@@ -78,8 +96,13 @@ async function main() {
   }
   let totLines = 0;
   let totRepro = 0;
-  for (const [etb, filed, label] of pairs) {
-    const r = await validatePair(fs.readFileSync(etb), fs.readFileSync(filed), label);
+  for (const [etb, filed, label, prior] of pairs) {
+    const r = await validatePair(
+      fs.readFileSync(etb),
+      fs.readFileSync(filed),
+      label + (prior ? ' [PY-primed]' : ''),
+      prior ? fs.readFileSync(prior) : undefined
+    );
     totLines += r.filedInputLines;
     totRepro += r.reproduced;
     console.log(

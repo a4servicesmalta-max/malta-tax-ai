@@ -26,7 +26,8 @@ const HEADER_PATTERNS: Array<{ kind: ColKind; re: RegExp }> = [
     kind: 'balance',
     re: /^(?!.*(?:open(?:ing)?|\bb\/?f\b|brought\s*forward|debit|credit|\bdr\b|\bcr\b)).*(?:final|adjusted|closing|balance|amount|\btb\b|current)/i,
   },
-  { kind: 'code', re: /^(a\/?c|n\/?c|nominal|acc(ount)?)\s*(code|no|number|ref)\.?$|^code\.?$|^ref\.?$|^n\/c$/i },
+  // "A/c" and "N/C" appear bare (no "code" suffix) in the firm's audit-file ETBs.
+  { kind: 'code', re: /^(a\/?c|n\/?c|nominal|acc(ount)?)\s*(code|no|number|ref)\.?$|^code\.?$|^ref\.?$|^n\/?c$|^a\/?c$/i },
   { kind: 'name', re: /name|description|account|narrative|details/i },
 ];
 
@@ -88,13 +89,34 @@ function classifyRow(row: unknown[]): {
       yearCols.push({ c, year: cell });
     }
   });
+  // Balance columns headed by a year IN THE TEXT ("Final Balance 2022" CY,
+  // "Final Balance 2021" PY — the firm's audit-file ETB layout; also Sage
+  // "Final Balances 2023"). Final/adjusted/closing columns beat interim ones
+  // ("Clients Balance", "Balances as at 31.10"); max year = CY, next = PY.
+  const textYearCols: Array<{ c: number; year: number; final: boolean }> = [];
+  row.forEach((cell, c) => {
+    if (typeof cell !== 'string') return;
+    const m = cell.match(/((?:19|20)\d{2})/);
+    if (m && /final|adjust|closing|balance/i.test(cell) && classify(cell) === 'balance') {
+      textYearCols.push({ c, year: Number(m[1]), final: /final|adjust|closing/i.test(cell) });
+    }
+  });
+  if (textYearCols.length) {
+    const pool = textYearCols.some((x) => x.final) ? textYearCols.filter((x) => x.final) : textYearCols;
+    pool.sort((a, b) => b.year - a.year || b.c - a.c);
+    for (const [c, k] of [...cols]) if (k === 'balance' || k === 'pyBalance' || k === 'debit' || k === 'credit') cols.delete(c);
+    cols.set(pool[0].c, 'balance');
+    if (pool[1] && pool[1].year < pool[0].year) cols.set(pool[1].c, 'pyBalance');
+    balanceHeaders.length = 0;
+  }
   // Extended TBs head their closing-balance columns with the year itself
   // ("… | 2024 | … | 2023"); those supersede pre-adjustment text columns like
   // "Client TB", so the ambiguity is resolved deterministically: max year = CY,
   // next = PY.
-  // (≥2 labelled columns required, so a data row whose balance happens to equal
-  // a year number — e.g. €2024 — can't be mistaken for a header.)
-  if (yearCols.length && cols.size >= 2) {
+  // (Guard: either ≥2 labelled columns, or a name column plus BOTH CY and PY
+  // year columns — the firm's "Account Description | 2023 | … | 2022" TBs — so
+  // a data row whose balance equals a year number can't become a header.)
+  if (yearCols.length && (cols.size >= 2 || (cols.size >= 1 && [...cols.values()].includes('name') && yearCols.length >= 2))) {
     yearCols.sort((a, b) => b.year - a.year);
     for (const [c, k] of [...cols]) if (k === 'balance' || k === 'pyBalance') cols.delete(c);
     cols.set(yearCols[0].c, 'balance');
@@ -119,6 +141,41 @@ function classifyRow(row: unknown[]): {
   return { cols, balanceHeaders, isHeader: hasAmount && hasName };
 }
 
+/**
+ * Sheet-name preference: audit workbooks have ~95 sheets and the ETB lives on a
+ * sheet literally named "ETB"; Sage client files carry "TB" plus an
+ * "adjusted tb" (the one the accounts were finalised from). A strong name bonus
+ * stops an analysis sheet from out-scoring the real ETB by column count.
+ */
+function sheetBonus(name: string): number {
+  const n = name.trim().toLowerCase();
+  if (/^etb$|extended trial/i.test(n)) return 20;
+  if (/adjus/.test(n) && /tb|trial/.test(n)) return 15;
+  if (/^tb$|trial balance/.test(n)) return 10;
+  return 0;
+}
+
+/**
+ * Sage-style TBs split the header over two rows: codes/names/Dr/Cr on one row,
+ * the "Final Balances 2023" column texts on the row ABOVE and to the RIGHT.
+ * Merge upward for classification only, and only for columns beyond the header
+ * row's own content — borrowing to the left would let a sheet title ("Trial
+ * Balance") swallow an unlabelled description column (QuickBooks TBs).
+ */
+function mergeHeaderRows(row: unknown[], above: unknown[] | undefined): unknown[] {
+  if (!above) return row;
+  let maxOwn = -1;
+  row.forEach((c, i) => {
+    if (c !== null && c !== undefined && c !== '') maxOwn = i;
+  });
+  const width = Math.max(row.length, above.length);
+  const merged: unknown[] = [...row];
+  for (let i = maxOwn + 1; i < width; i++) {
+    if (typeof above[i] === 'string') merged[i] = above[i];
+  }
+  return merged;
+}
+
 export function parseEtb(buffer: Buffer): ParsedEtb {
   const wb = XLSX.read(buffer, { type: 'buffer' });
   let best: {
@@ -135,10 +192,11 @@ export function parseEtb(buffer: Buffer): ParsedEtb {
       raw: true,
       defval: null,
     });
+    const bonus = sheetBonus(sheetName);
     for (let r = 0; r < Math.min(rows.length, 30); r++) {
-      const { cols, balanceHeaders, isHeader } = classifyRow(rows[r] ?? []);
+      const { cols, balanceHeaders, isHeader } = classifyRow(mergeHeaderRows(rows[r] ?? [], rows[r - 1]));
       if (isHeader) {
-        const score = cols.size;
+        const score = cols.size + bonus;
         if (!best || score > best.score) best = { score, sheet: sheetName, row: r, cols, balanceHeaders };
       }
     }

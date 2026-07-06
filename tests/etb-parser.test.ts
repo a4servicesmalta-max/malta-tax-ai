@@ -73,6 +73,50 @@ describe('parseEtb', () => {
     ]);
   });
 
+  it('parses the firm audit-file ETB layout ("Final Balance <year>" text columns)', () => {
+    // Mirrors the A4 audit workbook ETB sheet: A/c | Details | Clients Balance |
+    // Ref | Adj | Final Balance 2022 | P&L | Balance Sheet | Final Balance 2021.
+    const buf = syntheticEtbXlsx([
+      ['M Client Limited', null, null, null, null, null, null, null, null],
+      ['A/c', 'Details', 'Clients Balance', 'Ref', 'Adj', 'Final Balance 2022', 'Profit & Loss', 'Balance Sheet', 'Final Balance 2021'],
+      [20, 'Computers equipment', 1072, 'AA10', 212, 1284, null, 1284, 1072],
+      [21, 'Computers depreciation', -268, 'AA6', -480, -748, null, -748, -268],
+    ]);
+    const res = parseEtb(buf);
+    expect(res.accounts).toEqual([
+      { accountCode: '20', accountName: 'Computers equipment', cyBalance: 1284, pyBalance: 1072 },
+      { accountCode: '21', accountName: 'Computers depreciation', cyBalance: -748, pyBalance: -268 },
+    ]);
+  });
+
+  it('parses a name + numeric year columns TB (no codes, no Dr/Cr)', () => {
+    const buf = syntheticEtbXlsx([
+      ['Account Description', 2023, 'P/B', 'P/L', 'B/S', 2022],
+      ['Audit Fees', 1450, 'P', 1450, 0, 1650],
+      ['Revenue', -9000, 'P', -9000, 0, -10200],
+    ]);
+    const res = parseEtb(buf);
+    expect(res.accounts.map((a) => [a.accountName, a.cyBalance, a.pyBalance])).toEqual([
+      ['Audit Fees', 1450, 1650],
+      ['Revenue', -9000, -10200],
+    ]);
+  });
+
+  it('parses a Sage two-row header TB, preferring the final-balances column over interim Dr/Cr', () => {
+    const buf = syntheticEtbXlsx([
+      ['Client Ltd', null, null, null, null, null],
+      [null, null, null, 'Balances as at 31.10.2023', 'Movements', 'Final Balances 2023'],
+      ['N/C', 'Name', 'DR', null, null, null],
+      ['0030', 'Office Equipment', 1852.94, 1852.94, 0, 1852.94],
+      ['1100', 'Debtors Control Account', 739435.09, 739435.09, null, 79219.2],
+    ]);
+    const res = parseEtb(buf);
+    expect(res.accounts).toEqual([
+      { accountCode: '0030', accountName: 'Office Equipment', cyBalance: 1852.94, pyBalance: null },
+      { accountCode: '1100', accountName: 'Debtors Control Account', cyBalance: 79219.2, pyBalance: null },
+    ]);
+  });
+
   it('rejects a file where no header row can be found', () => {
     const buf = syntheticEtbXlsx([['just', 'some', 'text'], ['more', 'noise', 1]]);
     expect(() => parseEtb(buf)).toThrow(/could not locate an ETB header row/i);
