@@ -72,6 +72,66 @@ function overlayFingerprints(rules: ProposedRule[], accounts: EtbAccount[], ctx:
   return [...byLedger.values()];
 }
 
+/**
+ * Accounts per mapping call. A 126-account ETB truncated the 8000-token
+ * response mid-JSON and lost the whole B_Sheet tail (ESDL FY2024); chunking
+ * bounds the response size regardless of client size.
+ */
+const CHUNK_SIZE = 55;
+
+/** One mapping call for one chunk of accounts. Throws on API/parse failure. */
+async function proposeChunk(
+  chunk: EtbAccount[],
+  ctx: ProposalContext,
+  opts: AiMapperOptions
+): Promise<ProposedRule[]> {
+  const priorNote = ctx.priorYearCodes?.size
+    ? `Codes used on this client's prior-year return (prefer these where sensible): ${[...ctx.priorYearCodes].join(', ')}.`
+    : '';
+  const codesNote = ctx.templateCodes?.length
+    ? `VALID CODES on this template (use ONLY these; ★ = line commonly used on real filed returns, prefer it when it fits):\n${templateCodesPrompt(ctx.templateCodes)}\n\n`
+    : '';
+  const res = await callAnthropic(
+    {
+      model: opts.model ?? process.env.ANTHROPIC_MODEL ?? 'claude-fable-5',
+      // Sized for one CHUNK of accounts (one JSON rule each) with headroom.
+      max_tokens: 8000,
+      system: SYSTEM,
+      messages: [
+        {
+          role: 'user',
+          content: `${codesNote}${priorNote}\nAccounts (last column, when present, is the statement the ETB itself assigns: PL = Income sheet ONLY, BS = B_Sheet ONLY):\n${chunk
+            .map(
+              (a) =>
+                `${a.accountCode}\t${sanitizeName(a.accountName)}\t${a.cyBalance >= 0 ? 'Dr' : 'Cr'}${a.statement ? `\t${a.statement}` : ''}`
+            )
+            .join('\n')}`,
+        },
+      ],
+    },
+    opts
+  );
+  const text = res.content.find((c) => c.type === 'text')?.text ?? '';
+  // Long real-world responses are occasionally imperfect JSON (prose wrapper,
+  // truncation, a malformed element mid-array). Each rule is a flat object,
+  // so salvage them individually instead of all-or-nothing parsing.
+  let ruleObjs: unknown[];
+  try {
+    const parsed = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
+    ruleObjs = Array.isArray(parsed.rules) ? parsed.rules : [];
+  } catch {
+    ruleObjs = [...text.matchAll(/\{[^{}]*"ledgerCode"[^{}]*\}/g)].flatMap((m) => {
+      try {
+        return [JSON.parse(m[0])];
+      } catch {
+        return [];
+      }
+    });
+    console.warn(`[ai-mapper] JSON imperfect — salvaged ${ruleObjs.length} rule objects`);
+  }
+  return ruleObjs as ProposedRule[];
+}
+
 export async function proposeMappingAI(
   accounts: EtbAccount[],
   ctx: ProposalContext,
@@ -84,60 +144,18 @@ export async function proposeMappingAI(
   if (!isAiConfigured(opts)) return fallback();
 
   try {
-    const priorNote = ctx.priorYearCodes?.size
-      ? `Codes used on this client's prior-year return (prefer these where sensible): ${[...ctx.priorYearCodes].join(', ')}.`
-      : '';
-    const codesNote = ctx.templateCodes?.length
-      ? `VALID CODES on this template (use ONLY these; ★ = line commonly used on real filed returns, prefer it when it fits):\n${templateCodesPrompt(ctx.templateCodes)}\n\n`
-      : '';
-    const res = await callAnthropic(
-      {
-        model: opts.model ?? process.env.ANTHROPIC_MODEL ?? 'claude-fable-5',
-        // Sized for real ETBs (~100 accounts × one JSON rule each); a too-small
-        // budget truncates the JSON mid-list and the whole proposal is lost.
-        max_tokens: 8000,
-        system: SYSTEM,
-        messages: [
-          {
-            role: 'user',
-            content: `${codesNote}${priorNote}\nAccounts (last column, when present, is the statement the ETB itself assigns: PL = Income sheet ONLY, BS = B_Sheet ONLY):\n${accounts
-              .map(
-                (a) =>
-                  `${a.accountCode}\t${sanitizeName(a.accountName)}\t${a.cyBalance >= 0 ? 'Dr' : 'Cr'}${a.statement ? `\t${a.statement}` : ''}`
-              )
-              .join('\n')}`,
-          },
-        ],
-      },
-      opts
-    );
-    const text = res.content.find((c) => c.type === 'text')?.text ?? '';
-    // Long real-world responses are occasionally imperfect JSON (prose wrapper,
-    // truncation, a malformed element mid-array). Each rule is a flat object,
-    // so salvage them individually instead of all-or-nothing parsing.
-    let ruleObjs: unknown[];
-    try {
-      const parsed = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
-      ruleObjs = Array.isArray(parsed.rules) ? parsed.rules : [];
-    } catch {
-      ruleObjs = [...text.matchAll(/\{[^{}]*"ledgerCode"[^{}]*\}/g)].flatMap((m) => {
-        try {
-          return [JSON.parse(m[0])];
-        } catch {
-          return [];
-        }
-      });
-      console.warn(`[ai-mapper] JSON imperfect — salvaged ${ruleObjs.length} rule objects`);
+    // Chunked so the response size is bounded by CHUNK_SIZE, not client size.
+    const ruleObjs: ProposedRule[] = [];
+    for (let i = 0; i < accounts.length; i += CHUNK_SIZE) {
+      ruleObjs.push(...(await proposeChunk(accounts.slice(i, i + CHUNK_SIZE), ctx, opts)));
     }
     if (!ruleObjs.length) return fallback();
-    // Safe: the filter below validates every field of every rule.
-    const parsed = { rules: ruleObjs as ProposedRule[] };
     const knownLedgerCodes = new Set(accounts.map((a) => a.accountCode));
     const accByCode = new Map(accounts.map((a) => [a.accountCode, a]));
     // Template-aware hard filter: a hallucinated code would land nowhere and
     // leave a section of the return empty — drop it so the row shows unmapped.
     const validKeys = ctx.templateCodes?.length ? codeKeySet(ctx.templateCodes) : null;
-    const rules: ProposedRule[] = parsed.rules.filter(
+    const rules: ProposedRule[] = ruleObjs.filter(
       (r: ProposedRule) =>
         typeof r.ledgerCode === 'string' &&
         knownLedgerCodes.has(r.ledgerCode) &&
