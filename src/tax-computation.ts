@@ -65,7 +65,11 @@ export function computeTax(
   const totalDeductions = round2(deductions.reduce((a, l) => a + l.amount, 0));
 
   const adjustedProfit = round2(netProfitPerAccounts + totalAddBacks - totalDeductions);
-  const capitalAllowances = answers['capitalAllowancesTotal'] ?? 0;
+  // Current-year allowances plus unabsorbed allowances b/f (Art. 14(1)(f)
+  // proviso) — both reduce income before loss relief.
+  const capitalAllowances = round2(
+    (answers['capitalAllowancesTotal'] ?? 0) + (answers['unabsorbedCapitalAllowancesBf'] ?? 0)
+  );
   const incomeAfterCapitalAllowances = round2(adjustedProfit - capitalAllowances);
 
   const lossesBroughtForward = answers['lossesBroughtForward'] ?? 0;

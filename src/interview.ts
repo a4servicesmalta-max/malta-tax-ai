@@ -96,6 +96,8 @@ export interface InterviewContext {
   hasPriorReturn: boolean;
   /** Deterministic pre-answer for losses b/f if extracted from an anchored prior return. */
   priorLossesBroughtForward?: number | null;
+  /** Deterministic pre-answer for unabsorbed capital allowances b/f from the prior return. */
+  priorUnabsorbedCaBf?: number | null;
 }
 
 export function buildInterview(etb: EtbAccount[], ctx: InterviewContext): Interview {
@@ -128,6 +130,15 @@ export function buildInterview(etb: EtbAccount[], ctx: InterviewContext): Interv
     preAnswer: ctx.priorLossesBroughtForward ?? null,
     triggeredBy: [],
   });
+  questions.push({
+    id: 'unabsorbedCapitalAllowancesBf',
+    text: 'Unabsorbed capital allowances brought forward from prior years (0 if none).',
+    legalBasis:
+      'Cap. 123 Art. 14(1)(f) proviso — unabsorbed wear-and-tear allowances are carried forward and set against income of the same source in subsequent years.',
+    kind: 'amount',
+    preAnswer: ctx.priorUnabsorbedCaBf ?? null,
+    triggeredBy: [],
+  });
   const caGuidance = wearAndTearGuidance(etb.map((a) => a.accountName));
   questions.push({
     id: 'capitalAllowancesTotal',
@@ -153,6 +164,7 @@ export const LABELS: Record<string, string> = {
   dividendsExemptPE: 'Exempt: participation exemption dividends',
   lossesBroughtForward: 'Deduct: losses brought forward',
   capitalAllowancesTotal: 'Deduct: capital allowances',
+  unabsorbedCapitalAllowancesBf: 'Deduct: unabsorbed capital allowances b/f',
 };
 
 /**

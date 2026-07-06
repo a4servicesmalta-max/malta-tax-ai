@@ -24,6 +24,10 @@ export const ANCHORS: Record<string, DirectAnchor | null> = {
   // (66c/R52) columns when a non-MTA profile is supported.
   lossesBroughtForward: { sheet: 'p4', ref: 'O52', negate: true },
   capitalAllowancesTotal: null, // fields 43a–c are formulas from the TRA5 schedule — enter per-asset on TRA5
+  // p4 Capital Allowances "Brought forward" input row (row 13, Maltese Taxed
+  // A/c column O) — verified across YA2023–YA2025 vintages; real filed returns
+  // carry it NEGATIVE (6 corpus returns, e.g. ESDL −172,022), hence negate.
+  unabsorbedCapitalAllowancesBf: { sheet: 'p4', ref: 'O13', negate: true },
   depreciationAddBack: { sheet: 'p3', ref: 'E8' }, // field 2a
   finesPenaltiesAddBack: { sheet: 'p3', ref: 'E33', labelRef: 'B33' }, // field 14a (disallowed expenditure, specify)
   donationsAddBack: { sheet: 'p3', ref: 'E41', labelRef: 'B41' }, // field 16a (other add-backs, specify)

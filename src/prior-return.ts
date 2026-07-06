@@ -59,6 +59,20 @@ export async function readPriorReturn(buffer: Buffer): Promise<PriorReturnInfo> 
  * never a guessed figure.
  */
 export function priorLossesCarriedForward(buffer: Buffer): number | null {
+  return sumP4Row(buffer, /unabsorbed trading losses c\/?fwd/i);
+}
+
+/**
+ * Unabsorbed capital allowances carried forward on the filed prior return
+ * (p4 "Unabsorbed capital allowances c/f", value columns K/O/R) — becomes this
+ * year's CA-b/f pre-answer. Cached formula values; |sum| because the template
+ * carries allowances negative. Null when nothing readable — never guessed.
+ */
+export function priorUnabsorbedCapitalAllowancesCf(buffer: Buffer): number | null {
+  return sumP4Row(buffer, /unabsorbed capital allowances c\/?f(?:wd)?/i);
+}
+
+function sumP4Row(buffer: Buffer, labelRe: RegExp): number | null {
   let ws: XLSX.WorkSheet | undefined;
   try {
     ws = XLSX.read(buffer, { type: 'buffer', sheets: ['p4'] }).Sheets['p4'];
@@ -68,12 +82,11 @@ export function priorLossesCarriedForward(buffer: Buffer): number | null {
   if (!ws || !ws['!ref']) return null;
   const range = XLSX.utils.decode_range(ws['!ref']);
   for (let r = range.s.r; r <= range.e.r; r++) {
-    const label = ws[XLSX.utils.encode_cell({ r, c: 2 })]; // column C
-    if (!label || !/unabsorbed trading losses c\/?fwd/i.test(String(label.v))) continue;
+    const label = ws[XLSX.utils.encode_cell({ r, c: 2 })];
+    if (!label || !labelRe.test(String(label.v))) continue;
     let sum = 0;
     let found = false;
     for (const c of [10, 14, 17]) {
-      // K/O/R: Immovable Property, Maltese Taxed, Foreign Income value columns
       const cell = ws[XLSX.utils.encode_cell({ r, c })];
       if (cell && typeof cell.v === 'number') {
         sum += cell.v;
@@ -81,6 +94,35 @@ export function priorLossesCarriedForward(buffer: Buffer): number | null {
       }
     }
     return found ? round2(Math.abs(sum)) : null;
+  }
+  return null;
+}
+
+/**
+ * Prior-year income allocated to the tax accounts (p6 "Income for the year
+ * allocated to the different tax accounts"). Surfaced as review context — the
+ * FTA/IPA/MTA/UA split drives the shareholders' refund entitlement (6/7, 5/7,
+ * 2/3), so the preparer sees what was applied last year. Read-only info.
+ */
+export function priorTaxAccountAllocations(buffer: Buffer): { total: number; nonZero: number } | null {
+  let ws: XLSX.WorkSheet | undefined;
+  try {
+    ws = XLSX.read(buffer, { type: 'buffer', sheets: ['p6'] }).Sheets['p6'];
+  } catch {
+    return null;
+  }
+  if (!ws || !ws['!ref']) return null;
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    const label = ws[XLSX.utils.encode_cell({ r, c: 1 })];
+    if (!label || !/allocated to the different tax accounts/i.test(String(label.v))) continue;
+    const vals: number[] = [];
+    for (let c = 3; c <= 24; c++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      if (cell && typeof cell.v === 'number') vals.push(cell.v);
+    }
+    if (!vals.length) return null;
+    return { total: round2(vals.reduce((a, v) => a + v, 0)), nonZero: vals.filter((v) => Math.abs(v) > 0.5).length };
   }
   return null;
 }
@@ -244,6 +286,35 @@ export async function reviewPriorReturn(buffer: Buffer): Promise<PriorReturnRevi
       severity: 'error',
       message: 'No code values could be read from the prior-year return — unsupported or empty template.',
     });
+  }
+  // Arithmetic tie-out: the filed TOTAL rows are template formulas, but a
+  // return that was hand-edited after the last recalc (or had rows typed over)
+  // carries stale cached totals — a real "prior return contains errors" case.
+  // Compare each computed total against the sum of the section's input rows.
+  const totalsChecks: Array<{ code: number; sheet: string; label: string; inputs: (v: CfrValue) => boolean }> = [
+    { code: 2299, sheet: 'B_Sheet', label: 'TOTAL ASSETS', inputs: (v) => v.sheet === 'B_Sheet' && v.cfrCode < 2299 },
+    {
+      code: 3998,
+      sheet: 'B_Sheet',
+      label: 'TOTAL SHAREHOLDER EQUITY',
+      inputs: (v) => v.sheet === 'B_Sheet' && v.cfrCode >= 3800 && v.cfrCode < 3998,
+    },
+  ];
+  for (const t of totalsChecks) {
+    const total = values.find((v) => v.sheet === t.sheet && v.cfrCode === t.code && v.computed && v.value !== null);
+    if (!total) continue;
+    const sum = round2(
+      values.filter((v) => !v.computed && v.value !== null && t.inputs(v)).reduce((a, v) => a + (v.value as number), 0)
+    );
+    if (Math.abs(Math.abs(total.value as number) - Math.abs(sum)) > 1) {
+      findings.push({
+        severity: 'warning',
+        message:
+          `Prior-year ${t.label} (${t.code}) is €${(total.value as number).toFixed(2)} but its input rows sum to ` +
+          `€${sum.toFixed(2)} — the filed total does not tie to its own lines (stale recalc or hand-edited rows). ` +
+          `Verify the prior return before relying on brought-forward figures.`,
+      });
+    }
   }
   return { findings, balanceSheetNet, impliedNetProfit, convention };
 }

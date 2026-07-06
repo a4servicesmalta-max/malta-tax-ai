@@ -15,6 +15,8 @@ import {
   priorYearCrossCheck,
   reviewPriorReturn,
   priorLossesCarriedForward,
+  priorUnabsorbedCapitalAllowancesCf,
+  priorTaxAccountAllocations,
   type PriorReturnReview,
 } from './prior-return';
 import { proposeMappingAI } from './ai-mapper';
@@ -299,7 +301,24 @@ export function createApp() {
           priorLossesBroughtForward: session.priorBuffer
             ? priorLossesCarriedForward(session.priorBuffer)
             : null,
+          priorUnabsorbedCaBf: session.priorBuffer
+            ? priorUnabsorbedCapitalAllowancesCf(session.priorBuffer)
+            : null,
         });
+        // Prior-year tax-account allocations (drives shareholder refund
+        // entitlement) — surfaced as review context, read-only.
+        if (session.priorBuffer && priorReview) {
+          const alloc = priorTaxAccountAllocations(session.priorBuffer);
+          if (alloc && Math.abs(alloc.total) > 0.5) {
+            priorReview.findings.push({
+              severity: 'warning',
+              message:
+                `Prior-year return allocated €${alloc.total.toFixed(2)} of income to the tax accounts ` +
+                `(${alloc.nonZero} account${alloc.nonZero === 1 ? '' : 's'}). Check the FTA/IPA/MTA/UA split on p6 ` +
+                `when advising on shareholder refund claims (6/7, 5/7, 2/3) this year.`,
+            });
+          }
+        }
 
         let crossCheck = null;
         if (session.priorBuffer && proposal.rules.length) {
