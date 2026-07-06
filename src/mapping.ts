@@ -240,11 +240,10 @@ export function deriveSectionTotals(
       .reduce((a, c) => a + c.amount, 0);
     if (Math.abs(sum) > 0.005) out.push({ sheet: t.sheet, cfrCode: t.code, amount: round2(sum) });
   }
-  const npKey = 'Income:7050';
-  if (writableTotalKeys.has(npKey) && !existing.has(npKey)) {
-    const np = -codeCells.filter((c) => c.sheet === 'Income').reduce((a, c) => a + c.amount, 0);
-    if (Math.abs(np) > 0.005) out.push({ sheet: 'Income', cfrCode: 7050, amount: round2(np) });
-  }
+  // 7050 (net result) is deliberately NOT derived: real templates carry
+  // formula/duplicate twins for that row and a write can land on the wrong
+  // one (verification then correctly refuses to ship). The template computes
+  // the net result itself from the section lines.
   return out;
 }
 

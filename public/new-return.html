@@ -253,6 +253,9 @@ $('analyseBtn').addEventListener('click', async ()=>{
   TPL_CODES=data.templateCodes||[]; TPL_KEYS=new Set(TPL_CODES.map(c=>c.sheet+':'+c.code));
   buildCodeDatalists();
   $('proposalSource').textContent=(data.proposal&&data.proposal.source==='ai')?'AI-proposed — confirm each':'heuristic proposal — confirm each';
+  if(data.recalledFrom){
+    $('uploadMsgs').innerHTML=`<div class="callout c-ok">↺ Returning client recognised (“${esc(data.recalledFrom)}”) — your previously confirmed mapping has been applied. Review and adjust only what changed.</div>`;
+  }
   renderPriorReview();
   renderCrossCheck(data.crossCheck);
   renderMapping(data.proposal&&data.proposal.rules||[]);

@@ -20,7 +20,8 @@ import {
   type PriorReturnReview,
 } from './prior-return';
 import { proposeMappingAI } from './ai-mapper';
-import { applyMapping, netProfitFromMapping, deriveSectionTotals, TOTAL_CODE_KEYS } from './mapping';
+import { applyMapping, netProfitFromMapping, deriveSectionTotals, TOTAL_CODE_KEYS, sheetAllowed } from './mapping';
+import { recallMapping, rememberMapping } from './mapping-memory';
 import { buildInterview, fillsFromAnswers } from './interview';
 import { computeTax } from './tax-computation';
 import { reasonablenessReview } from './reasonableness-review';
@@ -54,6 +55,8 @@ interface Session {
   priorReview?: PriorReturnReview;
   fsFigures?: FsFigures;
   output?: { xlsx: Buffer; summary: string };
+  /** Client name of the remembered mapping this session was recognised as. */
+  recalledFrom?: string | null;
 }
 
 export function createApp() {
@@ -303,6 +306,26 @@ export function createApp() {
           priorYearValues: priorValues,
           templateCodes,
         });
+        // FLYWHEEL RECALL: a returning client (recognised by ledger-code
+        // overlap) opens with the firm's own previously CONFIRMED mapping —
+        // it overrides model proposals for the accounts it knows. Template
+        // validity and statement routing still apply.
+        const owner = currentUser(cookieToken(req))?.email ?? 'shared';
+        const recalled = recallMapping(owner, parsed.accounts);
+        let recalledFrom: string | null = null;
+        if (recalled) {
+          recalledFrom = recalled.clientName;
+          const validKeys = new Set(templateCodes.map((c) => `${c.sheet}:${c.code}`));
+          const accByCode = new Map(parsed.accounts.map((a) => [a.accountCode, a]));
+          const byLedger = new Map(proposal.rules.map((r) => [r.ledgerCode, r]));
+          for (const r of recalled.rules) {
+            if (!validKeys.has(`${r.sheet}:${r.cfrCode}`)) continue;
+            if (!sheetAllowed(accByCode.get(r.ledgerCode) ?? {}, r.sheet)) continue;
+            byLedger.set(r.ledgerCode, r);
+          }
+          proposal.rules = [...byLedger.values()];
+        }
+        session.recalledFrom = recalledFrom;
         const interview = buildInterview(parsed.accounts, {
           hasPriorReturn: !!priorCodes,
           priorLossesBroughtForward: session.priorBuffer
@@ -346,6 +369,9 @@ export function createApp() {
           priorReview: priorReview ?? null,
           // The UI constrains the CfR-code pickers to these real template rows.
           templateCodes,
+          // Returning client recognised by ledger overlap — mapping replayed
+          // from the firm's own confirmed history.
+          recalledFrom,
         });
       } catch (e) {
         res.status(400).json({ error: (e as Error).message });
@@ -586,6 +612,27 @@ export function createApp() {
           summary
         );
         creditsLeft = currentUser(cookieToken(req))?.credits ?? null;
+      }
+
+      // FLYWHEEL REMEMBER: the preparer just CONFIRMED this mapping by
+      // generating — persist it per client so next year opens pre-mapped.
+      try {
+        const nameByCode = new Map(session.accounts.map((a) => [a.accountCode, a.accountName]));
+        rememberMapping(
+          currentUser(cookieToken(req))?.email ?? 'shared',
+          clientName || 'Client',
+          yearOfAssessment || '',
+          (rules ?? [])
+            .filter((r: MappingRule): r is MappingRule & { ledgerCode: string } => !!r.ledgerCode)
+            .map((r) => ({
+              ledgerCode: r.ledgerCode,
+              ledgerName: nameByCode.get(r.ledgerCode) ?? '',
+              cfrCode: r.cfrCode,
+              sheet: r.sheet,
+            }))
+        );
+      } catch (e) {
+        console.warn('[mapping-memory] remember failed:', (e as Error).message);
       }
 
       // Best-effort admin notification (no-op unless SMTP is configured).
