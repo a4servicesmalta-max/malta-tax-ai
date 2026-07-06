@@ -323,6 +323,11 @@ export function parseEtb(buffer: Buffer): ParsedEtb {
     });
   }
 
+  // NOTE: code-range statement inference (Sage 0-3xxx=BS / 4xxx+=PL) was tried
+  // and reverted — real QuickBooks charts don't follow it reliably and wrong
+  // vetoes are worse than none. Statement routing comes only from explicit
+  // ETB columns; AI variance on statement-less TBs is caught by the FS tie.
+
   // Zero-balance accounts (this year AND last) don't belong on the return —
   // dropping them here keeps them out of mapping and the unmapped list.
   // (Tester-reported: zero rows were imported and demanded manual attention.)

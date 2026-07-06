@@ -95,6 +95,7 @@ async function proposeChunk(
     {
       model: opts.model ?? process.env.ANTHROPIC_MODEL ?? 'claude-fable-5',
       // Sized for one CHUNK of accounts (one JSON rule each) with headroom.
+      // (No temperature override: claude-fable-5 rejects the param.)
       max_tokens: 8000,
       system: SYSTEM,
       messages: [
