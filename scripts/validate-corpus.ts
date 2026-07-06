@@ -12,12 +12,18 @@
 import fs from 'node:fs';
 import { parseEtb } from '../src/etb-parser';
 import { proposeMappingAI } from '../src/ai-mapper';
-import { applyMapping } from '../src/mapping';
+import { applyMapping, netProfitFromMapping } from '../src/mapping';
 import { readTemplateCodes } from '../src/template-codes';
 import { readCfrValues } from '../src/template-reader';
 import { readPriorReturn } from '../src/prior-return';
 
 const TOL = 1;
+
+export interface OutcomeTie {
+  filed: number | null;
+  generated: number;
+  tied: boolean | null; // null = filed value unreadable
+}
 
 export interface PairResult {
   label: string;
@@ -27,6 +33,13 @@ export interface PairResult {
   reproduced: number;
   pct: number;
   misses: Array<{ sheet: string; code: number; filed: number; generated: number | null }>;
+  /**
+   * Substantive outcome ties: even where sub-line placement differs from the
+   * preparer, the P&L must net to the same profit (filed 7050) and the balance
+   * sheet to the same total assets (filed 2299) — the "is the tax right?" test,
+   * since the template computes the 35% charge from these.
+   */
+  outcome: { netProfit: OutcomeTie; totalAssets: OutcomeTie };
 }
 
 export async function validatePair(
@@ -52,10 +65,30 @@ export async function validatePair(
   const mapped = applyMapping(etb.accounts, { rules: proposal.rules });
   const byKey = new Map(mapped.codeCells.map((c) => [`${c.sheet}:${c.cfrCode}`, c.amount]));
 
-  const filed = (await readCfrValues(filedBuf, ['B_Sheet', 'Income'])).filter(
+  const allFiled = await readCfrValues(filedBuf, ['B_Sheet', 'Income']);
+  const filed = allFiled.filter(
     (v) => v.value !== null && !v.computed && Math.abs(v.value as number) > TOL && v.cfrCode !== 31
   );
   const positive = (await readPriorReturn(filedBuf)).convention === 'positive';
+
+  // Substantive outcome ties (computed template totals vs our derivation).
+  const filedAt = (sheet: string, code: number): number | null => {
+    const v = allFiled.find((x) => x.sheet === sheet && x.cfrCode === code && x.value !== null);
+    return v ? (v.value as number) : null;
+  };
+  const genNetProfit = netProfitFromMapping(mapped);
+  const genTotalAssets = mapped.codeCells
+    .filter((c) => c.sheet === 'B_Sheet' && c.cfrCode < 3000)
+    .reduce((a, c) => a + c.amount, 0);
+  const tieOf = (filedV: number | null, gen: number): OutcomeTie => ({
+    filed: filedV,
+    generated: Math.round(gen * 100) / 100,
+    tied: filedV === null ? null : Math.abs(Math.abs(filedV) - Math.abs(gen)) <= TOL,
+  });
+  const outcome = {
+    netProfit: tieOf(filedAt('Income', 7050), genNetProfit),
+    totalAssets: tieOf(filedAt('B_Sheet', 2299), genTotalAssets),
+  };
 
   let reproduced = 0;
   const misses: PairResult['misses'] = [];
@@ -74,6 +107,7 @@ export async function validatePair(
     reproduced,
     pct: filed.length ? Math.round((1000 * reproduced) / filed.length) / 10 : 0,
     misses,
+    outcome,
   };
 }
 
@@ -110,6 +144,12 @@ async function main() {
     console.log(
       `\n=== ${r.label} ===\n accounts=${r.accounts} proposal=${r.proposalSource} | reproduced ${r.reproduced}/${r.filedInputLines} filed input lines (${r.pct}%)`
     );
+    const fmtTie = (name: string, t: OutcomeTie) =>
+      ` OUTCOME ${name}: filed ${t.filed ?? '—'} vs generated ${t.generated} → ${
+        t.tied === null ? 'n/a' : t.tied ? 'TIED ✔' : 'DIFFERS ✘'
+      }`;
+    console.log(fmtTie('net profit (7050)', r.outcome.netProfit));
+    console.log(fmtTie('total assets (2299)', r.outcome.totalAssets));
     for (const m of r.misses.slice(0, 12)) {
       console.log(`   MISS ${m.sheet}/${m.code}: filed ${m.filed} vs generated ${m.generated ?? '—'}`);
     }

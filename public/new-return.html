@@ -429,6 +429,15 @@ $('generateBtn').addEventListener('click', async ()=>{
   let m='';
   if(data.unmatched&&data.unmatched.length) m+=`<div class="callout c-warn">Codes with no row in this template (NOT written — enter manually): ${data.unmatched.map(u=>`${u.sheet}/${u.cfrCode}`).join(', ')}</div>`;
   if(data.tie&&!data.tie.ok) m+=data.tie.issues.map(i=>`<div class="callout c-warn">${esc(i)}</div>`).join('');
+  if(data.tie&&data.tie.checks){
+    // Line-by-line FS tie scoreboard: which statement lines the generated
+    // return reproduces exactly (tied), disagrees with (mismatch) or could
+    // not be compared. A fully tied board = return matches the FS.
+    const NAMES={netProfit:'Net profit',totalAssets:'Total assets',revenue:'Revenue',totalEquity:'Total equity',totalLiabilities:'Total liabilities'};
+    const ICON={'tied':'✓','mismatch':'✘','not-compared':'—'};
+    const parts=Object.entries(data.tie.checks).filter(([k])=>NAMES[k]).map(([k,v])=>`${ICON[v]||'—'} ${NAMES[k]}`);
+    if(parts.length) m+=`<div class="callout ${data.tie.ok?'c-ok':'c-warn'}">FS tie: ${parts.join(' · ')}</div>`;
+  }
   if(data.verification&&data.verification.allWritesVerified){
     m+=`<div class="callout c-ok">✓ Verified before download: all ${data.verification.codeRowsWritten} figures from ${data.verification.accountsIncluded} mapped accounts were written to the return and re-checked in the generated file.</div>`;
   }
