@@ -37,6 +37,7 @@ import {
   resetPassword,
   currentUser,
   consumeCredit,
+  grantCredits,
   bootstrapAdmin,
 } from './accounts';
 import { saveReturn, listReturns, findReturn, returnFilePath } from './store';
@@ -183,6 +184,7 @@ export function createApp() {
 
   const PUBLIC_PAGES = new Set([
     '/', '/index.html', '/login', '/login.html', '/signup', '/signup.html', '/reset', '/reset.html', '/verify',
+    '/terms', '/terms.html',
   ]);
   const PUBLIC_API = new Set(['/api/register', '/api/login', '/api/logout', '/api/reset-request', '/api/reset']);
 
@@ -210,6 +212,18 @@ export function createApp() {
     const u = currentUser(cookieToken(req));
     if (!u) return res.status(401).json({ error: 'not authenticated' });
     res.json({ email: u.email, firm: u.firm, credits: u.credits, emailVerified: u.emailVerified });
+  });
+
+  // Manual sales flow: the ADMIN_EMAIL account grants purchased credits
+  // (bank transfer / invoice today; Stripe later). Non-admins get 403.
+  app.post('/api/admin/grant', (req, res) => {
+    const u = currentUser(cookieToken(req));
+    if (!u) return res.status(401).json({ error: 'not authenticated' });
+    const { email, credits } = (req.body || {}) as { email?: string; credits?: number };
+    const balance = grantCredits(u.email, email || '', Number(credits));
+    if (balance === null) return res.status(403).json({ error: 'not permitted, unknown user, or invalid amount' });
+    void notifyAdmin('Malta Tax AI — credits granted', `${u.email} granted ${credits} credits to ${email} (new balance ${balance}).`);
+    res.json({ ok: true, email, credits: balance });
   });
 
   app.get('/api/returns', (req, res) => {

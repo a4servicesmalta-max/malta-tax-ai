@@ -183,6 +183,21 @@ export function bootstrapAdmin(): void {
   console.info(`[accounts] bootstrapped admin ${email}`);
 }
 
+/**
+ * Grant credits to a user by email — the manual sales flow (bank transfer →
+ * admin grants). Caller must be the ADMIN_EMAIL account. Returns the new
+ * balance or null (unknown target / not admin / bad amount).
+ */
+export function grantCredits(adminEmail: string, targetEmail: string, credits: number): number | null {
+  const admin = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  if (!admin || adminEmail.toLowerCase() !== admin) return null;
+  if (!Number.isFinite(credits) || credits <= 0 || credits > 1000) return null;
+  const user = findUserByEmail(targetEmail.trim().toLowerCase());
+  if (!user) return null;
+  const updated = updateUser(user.id, { credits: user.credits + Math.floor(credits) });
+  return updated ? updated.credits : null;
+}
+
 /** Atomically decrement a credit; returns false if none left. */
 export function consumeCredit(userId: string): boolean {
   const user = findUserById(userId);
