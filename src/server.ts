@@ -277,7 +277,14 @@ export function createApp() {
   app.get('/api/me', (req, res) => {
     const u = currentUser(cookieToken(req));
     if (!u) return res.status(401).json({ error: 'not authenticated' });
-    res.json({ email: u.email, firm: u.firm, credits: u.credits, emailVerified: u.emailVerified });
+    const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+    res.json({
+      email: u.email,
+      firm: u.firm,
+      credits: u.credits,
+      emailVerified: u.emailVerified,
+      isAdmin: !!adminEmail && u.email.toLowerCase() === adminEmail,
+    });
   });
 
   // Manual sales flow: the ADMIN_EMAIL account grants purchased credits

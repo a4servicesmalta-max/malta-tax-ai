@@ -210,6 +210,28 @@
     setAll('.u-credits', me.credits);
     var f=document.getElementById('stat-credits'); if(f) f.textContent=me.credits;
     var fm=document.getElementById('stat-firm'); if(fm) fm.textContent=me.firm||'—';
+    // Admin-only: grant purchased credits (manual sales flow — invoice, then grant).
+    if(me.isAdmin){
+      var host=document.querySelector('main')||document.body;
+      var box=document.createElement('div');
+      box.style.cssText='max-width:1120px;margin:26px auto 0;padding:22px 24px;border:1px solid #e4e0d8;border-radius:16px;background:#fbfaf8';
+      box.innerHTML='<div style="font-family:var(--font-heading);font-size:18px;color:#14161a;margin-bottom:12px">Admin — grant credits</div>'
+        +'<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">'
+        +'<input id="ag-email" type="email" placeholder="customer@firm.com" style="flex:2;min-width:220px;padding:11px 14px;border-radius:10px;border:1px solid #ddd9d2;font-size:14px">'
+        +'<input id="ag-credits" type="number" min="1" max="1000" placeholder="Credits" style="flex:0 0 110px;padding:11px 14px;border-radius:10px;border:1px solid #ddd9d2;font-size:14px">'
+        +'<button id="ag-go" style="padding:11px 22px;border-radius:9999px;border:none;background:#494fdf;color:#fff;font-size:14px;font-weight:600;cursor:pointer">Grant</button>'
+        +'<span id="ag-msg" style="font-size:13px;color:#5c5951"></span></div>';
+      host.appendChild(box);
+      document.getElementById('ag-go').addEventListener('click', function(){
+        var msg=document.getElementById('ag-msg');
+        msg.textContent='…';
+        fetch('/api/admin/grant',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({email:document.getElementById('ag-email').value.trim(),credits:Number(document.getElementById('ag-credits').value)})})
+          .then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
+          .then(function(x){ msg.style.color=x.ok?'#1a7f4e':'#b23a2c'; msg.textContent=x.ok?('✓ '+x.d.email+' now has '+x.d.credits+' credits'):(x.d.error||'failed'); })
+          .catch(function(){ msg.style.color='#b23a2c'; msg.textContent='request failed'; });
+      });
+    }
   });
 
   fetch('/api/returns').then(function(r){return r.ok?r.json():{returns:[]};}).then(function(d){
