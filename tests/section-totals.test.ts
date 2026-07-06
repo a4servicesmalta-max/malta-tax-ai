@@ -19,7 +19,8 @@ describe('deriveSectionTotals', () => {
     expect(at('B_Sheet', 3799)).toBe(-300); // liabilities
     expect(at('B_Sheet', 3998)).toBe(-1200); // equity
     expect(at('Income', 5499)).toBe(-9000); // revenue
-    expect(at('Income', 7050)).toBe(7500); // profit = -(sum income)
+    // 7050 deliberately NOT derived (formula/duplicate twins on real templates).
+    expect(at('Income', 7050)).toBeUndefined();
   });
 
   it('never writes a total the template computes itself (not in writable set)', () => {
