@@ -6,6 +6,7 @@
  */
 import type { EtbAccount, InterviewFill } from './domain';
 import { ANCHORS } from './template-map';
+import { wearAndTearGuidance } from './capital-allowances';
 
 export interface Question {
   id: string;
@@ -127,10 +128,15 @@ export function buildInterview(etb: EtbAccount[], ctx: InterviewContext): Interv
     preAnswer: ctx.priorLossesBroughtForward ?? null,
     triggeredBy: [],
   });
+  const caGuidance = wearAndTearGuidance(etb.map((a) => a.accountName));
   questions.push({
     id: 'capitalAllowancesTotal',
     text: 'Total capital allowances claimed for the year (per the capital allowances computation / TRA5).',
-    legalBasis: 'Cap. 123 Art. 14(1)(f)(j) & Wear and Tear Rules — statutory allowances on plant, machinery and industrial buildings.',
+    legalBasis:
+      'Cap. 123 Art. 14(1)(f)(j) & Deduction (Wear and Tear) Rules SL 123.10 — statutory allowances on plant, machinery and industrial buildings.' +
+      (caGuidance.length
+        ? ' Statutory write-off periods for the asset categories in this ETB — ' + caGuidance.join(' ')
+        : ''),
     kind: 'amount',
     preAnswer: null,
     triggeredBy: [],
