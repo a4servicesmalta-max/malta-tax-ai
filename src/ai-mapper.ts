@@ -8,6 +8,7 @@ import type { EtbAccount, ProposedRule } from './domain';
 import { proposeMapping, type ProposalContext } from './mapping';
 import { isAiConfigured, callAnthropic, type AiAuthOptions } from './ai-auth';
 import { codeKeySet, type TemplateCode } from './template-codes';
+import { commonCodeKeys } from './code-usage';
 
 /** Max-first / API-key-fallback auth (see ai-auth), plus an optional model override. */
 export interface AiMapperOptions extends AiAuthOptions {
@@ -38,11 +39,15 @@ Reply with JSON only: {"rules":[{"ledgerCode":string,"cfrCode":number,"sheet":"B
 Omit an account only when nothing on the list plausibly fits — a human preparer reviews everything.
 Never invent amounts; you only classify accounts.`;
 
-/** Compact "VALID CODES" section for the prompt, grouped per sheet. */
+/** Compact "VALID CODES" section for the prompt, grouped per sheet. A ★ marks lines
+ *  real preparers commonly populate (from the filed-return corpus) — a tie-breaker
+ *  nudge toward real-world lines, not a constraint. */
 function templateCodesPrompt(codes: TemplateCode[]): string {
+  const common = commonCodeKeys();
   const bySheet: Record<string, string[]> = {};
   for (const c of codes) {
-    (bySheet[c.sheet] ??= []).push(`${c.code}${c.label ? ` = ${sanitizeName(c.label)}` : ''}`);
+    const star = common.has(`${c.sheet}:${c.code}`) ? ' ★' : '';
+    (bySheet[c.sheet] ??= []).push(`${c.code}${c.label ? ` = ${sanitizeName(c.label)}` : ''}${star}`);
   }
   return Object.entries(bySheet)
     .map(([sheet, lines]) => `${sheet}:\n${lines.join('\n')}`)
@@ -62,7 +67,7 @@ export async function proposeMappingAI(
       ? `Codes used on this client's prior-year return (prefer these where sensible): ${[...ctx.priorYearCodes].join(', ')}.`
       : '';
     const codesNote = ctx.templateCodes?.length
-      ? `VALID CODES on this template (use ONLY these):\n${templateCodesPrompt(ctx.templateCodes)}\n\n`
+      ? `VALID CODES on this template (use ONLY these; ★ = line commonly used on real filed returns, prefer it when it fits):\n${templateCodesPrompt(ctx.templateCodes)}\n\n`
       : '';
     const res = await callAnthropic(
       {

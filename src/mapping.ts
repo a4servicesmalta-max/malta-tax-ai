@@ -72,6 +72,9 @@ export function applyMapping(accounts: EtbAccount[], profile: MappingProfile): M
 // Ported verbatim from
 // C:\Users\user\Downloads\vacei-stack\_reint_be\src\modules\service\tax\malta-cit\maltaCit.mapping.ts
 // lines 100-161 (includes the VD-638 cash-vs-loan guard and cost-of-sales-before-revenue ordering).
+// CfR codes below are the ones real preparers actually populate on filed returns
+// (verified against 22 filed returns YA2009–2025, scripts/learn-corpus.ts). Order
+// is specific → generic because the first keyword match wins.
 const PROPOSALS: Array<{ kw: RegExp; cfrCode: number; sheet: CfrSheet; confidence: number }> = [
   // Guard the broad cash/bank match against debt terms so "Bank loan"/"Bank overdraft"
   // fall through to the loans rule below instead of the cash/bank asset line. (VD-638)
@@ -81,55 +84,60 @@ const PROPOSALS: Array<{ kw: RegExp; cfrCode: number; sheet: CfrSheet; confidenc
     sheet: 'B_Sheet',
     confidence: 0.95,
   },
-  { kw: /receivable|debtor/i, cfrCode: 2100, sheet: 'B_Sheet', confidence: 0.85 },
+  { kw: /trade debtor|debtor/i, cfrCode: 2052, sheet: 'B_Sheet', confidence: 0.85 },
+  { kw: /receivable/i, cfrCode: 2050, sheet: 'B_Sheet', confidence: 0.8 },
   { kw: /prepay/i, cfrCode: 2200, sheet: 'B_Sheet', confidence: 0.8 },
+  { kw: /share premium/i, cfrCode: 3805, sheet: 'B_Sheet', confidence: 0.9 },
   { kw: /share capital/i, cfrCode: 3801, sheet: 'B_Sheet', confidence: 0.96 },
   {
-    kw: /retained|accumulated|p ?& ?l reserve|profit (?:and|&) loss reserve/i,
+    kw: /retained|accumulated (?:profit|loss|earning)|p ?& ?l reserve|profit (?:and|&) loss reserve/i,
     cfrCode: 3905,
     sheet: 'B_Sheet',
     confidence: 0.9,
   },
-  { kw: /accrual/i, cfrCode: 3100, sheet: 'B_Sheet', confidence: 0.8 },
-  { kw: /payable|creditor/i, cfrCode: 3150, sheet: 'B_Sheet', confidence: 0.82 },
+  // Amounts due to directors/shareholders/related parties: the single most common
+  // balance-sheet payable line in real returns (13/22). Before the generic loan rule.
   {
-    kw: /loan|borrow|overdraft|director.?s? loan/i,
-    cfrCode: 3500,
+    kw: /due to (?:director|shareholder|related)|director.?s?[' ]?s? (?:loan|current a\/?c|current account|advance)|shareholder.?s? (?:loan|advance)/i,
+    cfrCode: 3300,
     sheet: 'B_Sheet',
-    confidence: 0.65,
+    confidence: 0.75,
   },
-  { kw: /reserve/i, cfrCode: 3950, sheet: 'B_Sheet', confidence: 0.55 },
+  { kw: /vat (?:payable|control|liability)/i, cfrCode: 3203, sheet: 'B_Sheet', confidence: 0.75 },
+  { kw: /trade creditor/i, cfrCode: 3101, sheet: 'B_Sheet', confidence: 0.85 },
+  { kw: /accrual|payable|creditor|accrued/i, cfrCode: 3100, sheet: 'B_Sheet', confidence: 0.8 },
+  { kw: /bank loan|overdraft|borrow/i, cfrCode: 3022, sheet: 'B_Sheet', confidence: 0.6 },
   {
-    kw: /property|plant|equipment|motor|vehicle|fixed asset|depreciation.*(?:asset|cost)/i,
-    cfrCode: 1100,
+    kw: /plant (?:and|&)? ?machinery|machinery/i,
+    cfrCode: 1350,
     sheet: 'B_Sheet',
     confidence: 0.7,
   },
-  { kw: /intangible|goodwill/i, cfrCode: 1200, sheet: 'B_Sheet', confidence: 0.8 },
+  { kw: /intangible|goodwill/i, cfrCode: 1200, sheet: 'B_Sheet', confidence: 0.7 },
   { kw: /investment|intercompany/i, cfrCode: 1500, sheet: 'B_Sheet', confidence: 0.5 },
-  {
-    kw: /inventor|stock|work in progress|\bwip\b/i,
-    cfrCode: 2100,
-    sheet: 'B_Sheet',
-    confidence: 0.5,
-  },
   // Cost-of-sales BEFORE revenue so "Cost of sales" is not stolen by the 'sales' in the
   // revenue rule (first-match-wins). (VD-638)
-  { kw: /cost of|purchase|\bcogs\b/i, cfrCode: 6000, sheet: 'Income', confidence: 0.75 },
-  { kw: /revenue|sales|turnover/i, cfrCode: 5000, sheet: 'Income', confidence: 0.92 },
+  { kw: /cost of (?:sales|goods)|\bcogs\b/i, cfrCode: 5998, sheet: 'Income', confidence: 0.6 },
+  { kw: /revenue|sales|turnover|income from/i, cfrCode: 5000, sheet: 'Income', confidence: 0.9 },
   { kw: /audit/i, cfrCode: 6173, sheet: 'Income', confidence: 0.95 },
+  { kw: /accountancy|accounting fee|bookkeep/i, cfrCode: 6172, sheet: 'Income', confidence: 0.85 },
   { kw: /professional|legal|consult/i, cfrCode: 6170, sheet: 'Income', confidence: 0.7 },
+  { kw: /director.*(?:salar|remunerat|fee)/i, cfrCode: 6025, sheet: 'Income', confidence: 0.8 },
   {
-    kw: /wage|salar|payroll|staff|pension|social security/i,
-    cfrCode: 6200,
+    kw: /wage|salar|payroll|staff cost|employee benefit|pension|social security|\bni\b/i,
+    cfrCode: 6020,
     sheet: 'Income',
     confidence: 0.82,
   },
-  { kw: /deprecia|amorti/i, cfrCode: 6300, sheet: 'Income', confidence: 0.85 },
-  { kw: /interest|finance cost/i, cfrCode: 7000, sheet: 'Income', confidence: 0.7 },
+  { kw: /company registration|registry fee|mbr fee|annual return fee/i, cfrCode: 6203, sheet: 'Income', confidence: 0.8 },
+  { kw: /bank charge/i, cfrCode: 6345, sheet: 'Income', confidence: 0.85 },
+  { kw: /interest|finance cost/i, cfrCode: 6340, sheet: 'Income', confidence: 0.6 },
+  { kw: /deprecia|amorti/i, cfrCode: 6430, sheet: 'Income', confidence: 0.7 },
+  { kw: /motor|vehicle running/i, cfrCode: 6611, sheet: 'Income', confidence: 0.6 },
+  { kw: /telephone|telecom|mobile/i, cfrCode: 6313, sheet: 'Income', confidence: 0.7 },
   {
-    kw: /admin|overhead|office|other operating|sundry/i,
-    cfrCode: 6100,
+    kw: /admin|overhead|office|other operating|sundry|general expense/i,
+    cfrCode: 6608,
     sheet: 'Income',
     confidence: 0.55,
   },
