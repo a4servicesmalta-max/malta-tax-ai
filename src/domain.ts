@@ -10,6 +10,12 @@ export interface EtbAccount {
   cyBalance: number;
   /** Prior-year comparative balance (used for the prior-return cross-check). */
   pyBalance: number | null;
+  /**
+   * Statement routing from the ETB itself (audit-file "Profit & Loss"/"Balance
+   * Sheet" split columns, or a P/B flag column). Authoritative when present:
+   * a PL account may only map to Income codes, a BS account only to B_Sheet.
+   */
+  statement?: 'PL' | 'BS' | null;
 }
 
 export interface MappingRule {

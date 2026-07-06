@@ -5,7 +5,7 @@
  * Grounding: prior-year code set + firm-corpus example mappings in the prompt.
  */
 import type { EtbAccount, ProposedRule } from './domain';
-import { proposeMapping, fingerprintRules, type ProposalContext } from './mapping';
+import { proposeMapping, fingerprintRules, sheetAllowed, type ProposalContext } from './mapping';
 import { isAiConfigured, callAnthropic, type AiAuthOptions } from './ai-auth';
 import { codeKeySet, type TemplateCode } from './template-codes';
 import { commonCodeKeys } from './code-usage';
@@ -100,8 +100,11 @@ export async function proposeMappingAI(
         messages: [
           {
             role: 'user',
-            content: `${codesNote}${priorNote}\nAccounts:\n${accounts
-              .map((a) => `${a.accountCode}\t${sanitizeName(a.accountName)}\t${a.cyBalance >= 0 ? 'Dr' : 'Cr'}`)
+            content: `${codesNote}${priorNote}\nAccounts (last column, when present, is the statement the ETB itself assigns: PL = Income sheet ONLY, BS = B_Sheet ONLY):\n${accounts
+              .map(
+                (a) =>
+                  `${a.accountCode}\t${sanitizeName(a.accountName)}\t${a.cyBalance >= 0 ? 'Dr' : 'Cr'}${a.statement ? `\t${a.statement}` : ''}`
+              )
               .join('\n')}`,
           },
         ],
@@ -130,6 +133,7 @@ export async function proposeMappingAI(
     // Safe: the filter below validates every field of every rule.
     const parsed = { rules: ruleObjs as ProposedRule[] };
     const knownLedgerCodes = new Set(accounts.map((a) => a.accountCode));
+    const accByCode = new Map(accounts.map((a) => [a.accountCode, a]));
     // Template-aware hard filter: a hallucinated code would land nowhere and
     // leave a section of the return empty — drop it so the row shows unmapped.
     const validKeys = ctx.templateCodes?.length ? codeKeySet(ctx.templateCodes) : null;
@@ -143,6 +147,9 @@ export async function proposeMappingAI(
         r.cfrCode > 0 &&
         (r.sheet === 'B_Sheet' || r.sheet === 'Income') &&
         (!validKeys || validKeys.has(`${r.sheet}:${r.cfrCode}`)) &&
+        // ETB statement routing is authoritative: a PL account on B_Sheet (or
+        // vice versa) is a categorical error, whatever the model's confidence.
+        sheetAllowed(accByCode.get(r.ledgerCode) ?? {}, r.sheet) &&
         typeof r.confidence === 'number' &&
         Number.isFinite(r.confidence) &&
         r.confidence >= 0 &&

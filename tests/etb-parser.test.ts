@@ -49,9 +49,9 @@ describe('parseEtb', () => {
     const res = parseEtb(buf);
     // year columns (max=CY, next=PY) supersede the pre-adjustment "Client TB" column
     expect(res.accounts).toEqual([
-      { accountCode: '0500', accountName: 'Equipment', cyBalance: 606083, pyBalance: 604706 },
-      { accountCode: '4000', accountName: 'Sales', cyBalance: -700000, pyBalance: -650000 },
-      { accountCode: '5000', accountName: 'Purchases', cyBalance: 93917, pyBalance: 45294 },
+      { accountCode: '0500', accountName: 'Equipment', cyBalance: 606083, pyBalance: 604706, statement: 'BS' },
+      { accountCode: '4000', accountName: 'Sales', cyBalance: -700000, pyBalance: -650000, statement: 'PL' },
+      { accountCode: '5000', accountName: 'Purchases', cyBalance: 93917, pyBalance: 45294, statement: 'PL' },
     ]);
     expect(res.warnings).toContain('Row 3 ("Account Description") skipped as repeated header row.');
   });
@@ -84,8 +84,8 @@ describe('parseEtb', () => {
     ]);
     const res = parseEtb(buf);
     expect(res.accounts).toEqual([
-      { accountCode: '20', accountName: 'Computers equipment', cyBalance: 1284, pyBalance: 1072 },
-      { accountCode: '21', accountName: 'Computers depreciation', cyBalance: -748, pyBalance: -268 },
+      { accountCode: '20', accountName: 'Computers equipment', cyBalance: 1284, pyBalance: 1072, statement: 'BS' },
+      { accountCode: '21', accountName: 'Computers depreciation', cyBalance: -748, pyBalance: -268, statement: 'BS' },
     ]);
   });
 

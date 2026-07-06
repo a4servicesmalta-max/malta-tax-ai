@@ -218,6 +218,17 @@ export interface ProposalContext {
 }
 
 /**
+ * Statement-routing veto: when the ETB itself says which statement an account
+ * belongs to, a proposal on the other sheet is a categorical error — the
+ * source of fake-profit blowups (a 1.2M property landing on an Income line).
+ */
+export function sheetAllowed(acc: Pick<EtbAccount, 'statement'>, sheet: CfrSheet): boolean {
+  if (acc.statement === 'PL') return sheet === 'Income';
+  if (acc.statement === 'BS') return sheet === 'B_Sheet';
+  return true;
+}
+
+/**
  * Prior-year value-fingerprint matching: if an account's PY balance equals (±€1)
  * the value the firm actually filed on exactly ONE line last year — and no other
  * account shares that balance — that account belongs on that line. Deterministic
@@ -248,6 +259,7 @@ export function fingerprintRules(
     );
     if (twin) continue;
     const [sheet, codeStr] = key.split(':');
+    if (!sheetAllowed(acc, sheet as CfrSheet)) continue; // ETB says other statement
     claimedCodes.add(key);
     rules.push({
       ledgerCode: acc.accountCode,
@@ -271,7 +283,7 @@ export function proposeMapping(
     // 1) Strongest signal: the account name matches a template code's LABEL.
     if (ctx.templateCodes?.length) {
       const m = bestLabelMatch(acc.accountName, ctx.templateCodes, 0.5);
-      if (m) {
+      if (m && sheetAllowed(acc, m.sheet)) {
         const boost = ctx.priorYearCodes?.has(m.code) ? 0.03 : 0;
         // exact label match → near-certain; strong overlap → high; scale the rest.
         const conf = m.score >= 0.999 ? 0.98 : 0.6 + m.score * 0.3;
@@ -281,7 +293,7 @@ export function proposeMapping(
     }
     // 2) Fallback: keyword heuristics (constrained to codes that exist).
     const name = (acc.accountName || '').toLowerCase();
-    const hit = PROPOSALS.find((p) => p.kw.test(name));
+    const hit = PROPOSALS.find((p) => p.kw.test(name) && sheetAllowed(acc, p.sheet));
     if (!hit) continue;
     if (validKeys && !validKeys.has(`${hit.sheet}:${hit.cfrCode}`)) continue;
     const boost = ctx.priorYearCodes?.has(hit.cfrCode) ? 0.05 : 0;

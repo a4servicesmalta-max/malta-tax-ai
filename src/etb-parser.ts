@@ -13,9 +13,27 @@ export interface ParsedEtb {
   sheetName: string;
 }
 
-type ColKind = 'code' | 'name' | 'debit' | 'credit' | 'balance' | 'pyBalance' | 'pyDebit' | 'pyCredit';
+type ColKind =
+  | 'code'
+  | 'name'
+  | 'debit'
+  | 'credit'
+  | 'balance'
+  | 'pyBalance'
+  | 'pyDebit'
+  | 'pyCredit'
+  | 'plAmount'
+  | 'bsAmount'
+  | 'plbsFlag';
 
 const HEADER_PATTERNS: Array<{ kind: ColKind; re: RegExp }> = [
+  // Statement-routing columns must claim their headers BEFORE 'balance' can
+  // swallow "Balance Sheet". Audit files split the final balance into
+  // "Profit & Loss" / "Balance Sheet" columns; Gerard-style TBs carry a "P/B"
+  // letter flag instead.
+  { kind: 'plbsFlag', re: /^p\/?b$/i },
+  { kind: 'plAmount', re: /^profit\s*&?\s*loss$|^p\s*&\s*l$|^p\/?l$/i },
+  { kind: 'bsAmount', re: /^balance\s*sheet$|^b\/?s$/i },
   { kind: 'pyDebit', re: /(prior|previous|py|comparat).*(debit|dr)|(debit|dr).*(prior|previous|py)/i },
   { kind: 'pyCredit', re: /(prior|previous|py|comparat).*(credit|cr)|(credit|cr).*(prior|previous|py)/i },
   { kind: 'pyBalance', re: /prior|previous|\bpy\b|comparat|last year/i },
@@ -225,6 +243,9 @@ export function parseEtb(buffer: Buffer): ParsedEtb {
   const cPy = col('pyBalance');
   const cPyDr = col('pyDebit');
   const cPyCr = col('pyCredit');
+  const cPl = col('plAmount');
+  const cBs = col('bsAmount');
+  const cFlag = col('plbsFlag');
 
   const warnings: string[] = [];
   const accounts: EtbAccount[] = [];
@@ -276,7 +297,28 @@ export function parseEtb(buffer: Buffer): ParsedEtb {
       const c = toNumber(row[cPyCr]);
       py = d === null && c === null ? null : (d ?? 0) - (c ?? 0);
     }
-    accounts.push({ accountCode: code || name, accountName: name || code, cyBalance: cy, pyBalance: py });
+    // Statement routing from the ETB's own columns: P/B letter flag wins;
+    // otherwise a figure in exactly ONE of the P&L / Balance Sheet split
+    // columns decides. Anything ambiguous stays null (no forced routing).
+    let statement: 'PL' | 'BS' | null = null;
+    if (cFlag != null && typeof row[cFlag] === 'string') {
+      const f = (row[cFlag] as string).trim().toUpperCase();
+      if (f.startsWith('P')) statement = 'PL';
+      else if (f.startsWith('B')) statement = 'BS';
+    }
+    if (statement === null && cPl != null && cBs != null) {
+      const inPl = toNumber(row[cPl]) !== null && Math.abs(toNumber(row[cPl]) as number) > 0;
+      const inBs = toNumber(row[cBs]) !== null && Math.abs(toNumber(row[cBs]) as number) > 0;
+      if (inPl !== inBs) statement = inPl ? 'PL' : 'BS';
+    }
+    accounts.push({
+      accountCode: code || name,
+      accountName: name || code,
+      cyBalance: cy,
+      pyBalance: py,
+      // Only present when the ETB actually declares it — keeps plain TBs' shape.
+      ...(statement ? { statement } : {}),
+    });
   }
 
   const sum = accounts.reduce((a, x) => a + x.cyBalance, 0);

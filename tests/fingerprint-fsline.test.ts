@@ -1,6 +1,54 @@
 import { describe, it, expect } from 'vitest';
-import { fingerprintRules } from '../src/mapping';
+import { fingerprintRules, sheetAllowed, proposeMapping } from '../src/mapping';
 import { extractFiguresFromText, tieCheck } from '../src/fs-tie-check';
+import { parseEtb } from '../src/etb-parser';
+import { syntheticEtbXlsx } from './helpers/synthetic';
+
+describe('ETB statement routing (PL/BS)', () => {
+  it('captures the statement from a P/B flag column', () => {
+    const res = parseEtb(
+      syntheticEtbXlsx([
+        ['Account Description', 2023, 'P/B', 'P/L', 'B/S', 2022],
+        ['Audit Fees', 1450, 'P', 1450, 0, 1650],
+        ['Property', 500000, 'B', 0, 500000, 500000],
+      ])
+    );
+    expect(res.accounts.map((a) => a.statement)).toEqual(['PL', 'BS']);
+  });
+
+  it('captures the statement from P&L / Balance Sheet split columns', () => {
+    const res = parseEtb(
+      syntheticEtbXlsx([
+        ['A/c', 'Details', 'Ref', 'Final Balance 2022', 'Profit & Loss', 'Balance Sheet', 'Final Balance 2021'],
+        [20, 'Computers', 'AA1', 1284, null, 1284, 1072],
+        [700, 'Audit fee', 'AA2', 1500, 1500, null, 1400],
+      ])
+    );
+    expect(res.accounts.map((a) => a.statement)).toEqual(['BS', 'PL']);
+  });
+
+  it('sheetAllowed vetoes cross-statement mapping', () => {
+    expect(sheetAllowed({ statement: 'PL' }, 'B_Sheet')).toBe(false);
+    expect(sheetAllowed({ statement: 'BS' }, 'Income')).toBe(false);
+    expect(sheetAllowed({ statement: null }, 'Income')).toBe(true);
+    expect(sheetAllowed({}, 'B_Sheet')).toBe(true);
+  });
+
+  it('heuristic proposals respect the statement (a BS "sales ledger" account cannot land on Income)', () => {
+    const { rules } = proposeMapping([
+      { accountCode: '1', accountName: 'Sales control account', cyBalance: 900, pyBalance: null, statement: 'BS' },
+    ]);
+    expect(rules.every((r) => r.sheet === 'B_Sheet')).toBe(true);
+  });
+
+  it('fingerprints respect the statement', () => {
+    const rules = fingerprintRules(
+      [{ accountCode: '1', accountName: 'X', cyBalance: 0, pyBalance: 500, statement: 'BS' }],
+      new Map([['Income:6000', 500]])
+    );
+    expect(rules).toEqual([]);
+  });
+});
 
 describe('prior-year value-fingerprint matching', () => {
   const acc = (code: string, name: string, cy: number, py: number | null) => ({
