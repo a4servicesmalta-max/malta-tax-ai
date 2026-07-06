@@ -198,6 +198,56 @@ export function bestLabelMatch(
   return best;
 }
 
+/**
+ * Section-total rows the firm's filed returns carry as TYPED inputs (verified
+ * across the 22-return corpus: 5499 on 13, 2299/3799/3998 on 18-19, 6997 and
+ * 7050 on 19). Each is pure arithmetic over the mapped component lines — no
+ * judgment, no AI. `lo..hi` are the component code ranges feeding the total.
+ */
+const SECTION_TOTALS: Array<{ sheet: CfrSheet; code: number; lo: number; hi: number }> = [
+  { sheet: 'B_Sheet', code: 2299, lo: 1000, hi: 2298 }, // TOTAL ASSETS
+  { sheet: 'B_Sheet', code: 3799, lo: 3000, hi: 3798 }, // TOTAL LIABILITIES
+  { sheet: 'B_Sheet', code: 3998, lo: 3800, hi: 3997 }, // TOTAL SHAREHOLDER EQUITY
+  { sheet: 'Income', code: 5499, lo: 5000, hi: 5498 }, // TOTAL REVENUE
+  { sheet: 'Income', code: 5998, lo: 5500, hi: 5997 }, // COST OF SALES
+  { sheet: 'Income', code: 6997, lo: 6000, hi: 6996 }, // TOTAL OPERATING EXPENSES
+];
+
+/** `sheet:code` keys of derivable total rows — aggregate calculations (net
+ *  profit, tie-check sums) must EXCLUDE these or they double-count. */
+export const TOTAL_CODE_KEYS = new Set([
+  ...SECTION_TOTALS.map((t) => `${t.sheet}:${t.code}`),
+  'Income:7050',
+]);
+
+/**
+ * Derive typed section totals from the mapped lines. Only totals whose row
+ * exists on the template as a NON-FORMULA input (writableTotalKeys) are
+ * produced — a template that computes its own total must never be overwritten.
+ * 7050 (net result) = −(sum of all Income lines) is included when writable.
+ */
+export function deriveSectionTotals(
+  codeCells: CfrCodeCell[],
+  writableTotalKeys: Set<string>
+): CfrCodeCell[] {
+  const out: CfrCodeCell[] = [];
+  const existing = new Set(codeCells.map((c) => `${c.sheet}:${c.cfrCode}`));
+  for (const t of SECTION_TOTALS) {
+    const key = `${t.sheet}:${t.code}`;
+    if (!writableTotalKeys.has(key) || existing.has(key)) continue;
+    const sum = codeCells
+      .filter((c) => c.sheet === t.sheet && c.cfrCode >= t.lo && c.cfrCode <= t.hi)
+      .reduce((a, c) => a + c.amount, 0);
+    if (Math.abs(sum) > 0.005) out.push({ sheet: t.sheet, cfrCode: t.code, amount: round2(sum) });
+  }
+  const npKey = 'Income:7050';
+  if (writableTotalKeys.has(npKey) && !existing.has(npKey)) {
+    const np = -codeCells.filter((c) => c.sheet === 'Income').reduce((a, c) => a + c.amount, 0);
+    if (Math.abs(np) > 0.005) out.push({ sheet: 'Income', cfrCode: 7050, amount: round2(np) });
+  }
+  return out;
+}
+
 export interface ProposalContext {
   /** CfR codes present on the client's prior-year return — small confidence boost. */
   priorYearCodes?: Set<number>;

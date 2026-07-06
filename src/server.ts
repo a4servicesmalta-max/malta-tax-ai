@@ -20,7 +20,7 @@ import {
   type PriorReturnReview,
 } from './prior-return';
 import { proposeMappingAI } from './ai-mapper';
-import { applyMapping, netProfitFromMapping } from './mapping';
+import { applyMapping, netProfitFromMapping, deriveSectionTotals, TOTAL_CODE_KEYS } from './mapping';
 import { buildInterview, fillsFromAnswers } from './interview';
 import { computeTax } from './tax-computation';
 import { reasonablenessReview } from './reasonableness-review';
@@ -481,7 +481,19 @@ export function createApp() {
           if (a.labelRef) directCells.push({ sheet: a.sheet, ref: a.labelRef, value: f.label });
         }
       }
-      const { buffer, unmatched } = await fillCfrReturn(session.template, fill.codeCells, directCells);
+      // Section totals (TOTAL REVENUE/ASSETS/…) are typed inputs on the firm's
+      // returns — derive them arithmetically, but ONLY for rows this template
+      // carries as non-formula inputs (a self-computing template is never
+      // overwritten). Derived from the pre-total cells; aggregates below
+      // exclude them via TOTAL_CODE_KEYS.
+      const templateVals = await readCfrValues(session.template, ['B_Sheet', 'Income']);
+      const writableTotals = new Set(
+        templateVals
+          .filter((v) => !v.computed && TOTAL_CODE_KEYS.has(`${v.sheet}:${v.cfrCode}`))
+          .map((v) => `${v.sheet}:${v.cfrCode}`)
+      );
+      const allCells = [...fill.codeCells, ...deriveSectionTotals(fill.codeCells, writableTotals)];
+      const { buffer, unmatched } = await fillCfrReturn(session.template, allCells, directCells);
       // Belt-and-braces: rules were validated against the template, so nothing
       // may be unmatched. If it is, the output is incomplete — refuse to ship it.
       if (unmatched.length) {
@@ -497,7 +509,7 @@ export function createApp() {
       // ships if 100% of intended writes are present and exact.
       const written = await readCfrValues(buffer, ['B_Sheet', 'Income']);
       const writtenByKey = new Map(written.map((w) => [`${w.sheet}:${w.cfrCode}`, w.value]));
-      const missing = fill.codeCells.filter((c) => {
+      const missing = allCells.filter((c) => {
         const v = writtenByKey.get(`${c.sheet}:${c.cfrCode}`);
         return v === null || v === undefined || Math.abs(v - c.amount) > 0.01;
       });
@@ -510,7 +522,7 @@ export function createApp() {
       }
       const verification = {
         accountsIncluded: fill.applied.size,
-        codeRowsWritten: fill.codeCells.length,
+        codeRowsWritten: allCells.length,
         allWritesVerified: true,
       };
 

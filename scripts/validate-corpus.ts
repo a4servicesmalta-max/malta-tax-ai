@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import { parseEtb } from '../src/etb-parser';
 import { proposeMappingAI } from '../src/ai-mapper';
-import { applyMapping, netProfitFromMapping } from '../src/mapping';
+import { applyMapping, netProfitFromMapping, deriveSectionTotals, TOTAL_CODE_KEYS } from '../src/mapping';
 import { readTemplateCodes } from '../src/template-codes';
 import { readCfrValues } from '../src/template-reader';
 import { readPriorReturn } from '../src/prior-return';
@@ -63,9 +63,15 @@ export async function validatePair(
   }
   const proposal = await proposeMappingAI(etb.accounts, { templateCodes: codes, priorYearCodes, priorYearValues });
   const mapped = applyMapping(etb.accounts, { rules: proposal.rules });
-  const byKey = new Map(mapped.codeCells.map((c) => [`${c.sheet}:${c.cfrCode}`, c.amount]));
 
   const allFiled = await readCfrValues(filedBuf, ['B_Sheet', 'Income']);
+  // Section totals are typed inputs on the firm's returns — derive them
+  // deterministically for rows that are non-formula inputs on this template.
+  const writableTotals = new Set(
+    allFiled.filter((v) => !v.computed && TOTAL_CODE_KEYS.has(`${v.sheet}:${v.cfrCode}`)).map((v) => `${v.sheet}:${v.cfrCode}`)
+  );
+  const withTotals = [...mapped.codeCells, ...deriveSectionTotals(mapped.codeCells, writableTotals)];
+  const byKey = new Map(withTotals.map((c) => [`${c.sheet}:${c.cfrCode}`, c.amount]));
   const filed = allFiled.filter(
     (v) => v.value !== null && !v.computed && Math.abs(v.value as number) > TOL && v.cfrCode !== 31
   );
