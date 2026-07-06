@@ -135,6 +135,61 @@ const PROPOSALS: Array<{ kw: RegExp; cfrCode: number; sheet: CfrSheet; confidenc
   },
 ];
 
+// --- Label-similarity matching (learns from the template's own code labels) ---
+// Malta CfR code labels ARE the standard account descriptions ("Wages - Regular"
+// = 6021), and firms name their ledger accounts to match. So the account name
+// vs code label is the strongest, most defensible signal — deterministic, free,
+// and explainable — far better than keyword guessing.
+const STOP = new Set(['and', 'the', 'for', 'of', 'to', 'other', 'total', 'net', 'a', 'in', 'on']);
+function normLabel(s: string): string {
+  return (s || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+function labelTokens(s: string): string[] {
+  return normLabel(s)
+    .split(' ')
+    .filter((w) => w.length > 1 && !STOP.has(w));
+}
+/** 0..1 similarity: exact normalized match = 1; else token overlap (Dice) with a containment boost. */
+export function labelSimilarity(accountName: string, codeLabel: string): number {
+  const na = normLabel(accountName);
+  const nl = normLabel(codeLabel);
+  if (!na || !nl) return 0;
+  if (na === nl) return 1;
+  const ta = labelTokens(accountName);
+  const tl = labelTokens(codeLabel);
+  if (!ta.length || !tl.length) return 0;
+  const setL = new Set(tl);
+  const inter = ta.filter((t) => setL.has(t)).length;
+  const dice = (2 * inter) / (ta.length + tl.length);
+  // Boost when the account name fully contains the code label's words (or vice
+  // versa) — "Wages - Regular staff" still clearly means "Wages - Regular".
+  const contain = inter === Math.min(ta.length, tl.length) ? 0.15 : 0;
+  return Math.min(1, dice + contain);
+}
+
+/**
+ * Best template code for an account by label similarity. Only returns a hit at
+ * or above `min` so weak guesses fall through to keyword/AI rather than
+ * confidently mislabelling.
+ */
+export function bestLabelMatch(
+  accountName: string,
+  templateCodes: import('./template-codes').TemplateCode[],
+  min = 0.5
+): { code: number; sheet: CfrSheet; score: number } | null {
+  let best: { code: number; sheet: CfrSheet; score: number } | null = null;
+  for (const c of templateCodes) {
+    if (!c.label) continue;
+    const score = labelSimilarity(accountName, c.label);
+    if (score >= min && (!best || score > best.score)) best = { code: c.code, sheet: c.sheet, score };
+  }
+  return best;
+}
+
 export interface ProposalContext {
   /** CfR codes present on the client's prior-year return — small confidence boost. */
   priorYearCodes?: Set<number>;
@@ -157,6 +212,18 @@ export function proposeMapping(
     : null;
   const rules: ProposedRule[] = [];
   for (const acc of accounts) {
+    // 1) Strongest signal: the account name matches a template code's LABEL.
+    if (ctx.templateCodes?.length) {
+      const m = bestLabelMatch(acc.accountName, ctx.templateCodes, 0.5);
+      if (m) {
+        const boost = ctx.priorYearCodes?.has(m.code) ? 0.03 : 0;
+        // exact label match → near-certain; strong overlap → high; scale the rest.
+        const conf = m.score >= 0.999 ? 0.98 : 0.6 + m.score * 0.3;
+        rules.push({ ledgerCode: acc.accountCode, cfrCode: m.code, sheet: m.sheet, confidence: Math.min(0.99, conf + boost) });
+        continue;
+      }
+    }
+    // 2) Fallback: keyword heuristics (constrained to codes that exist).
     const name = (acc.accountName || '').toLowerCase();
     const hit = PROPOSALS.find((p) => p.kw.test(name));
     if (!hit) continue;
