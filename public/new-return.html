@@ -444,6 +444,7 @@ $('generateBtn').addEventListener('click', async ()=>{
   if(data.verification&&data.verification.allWritesVerified){
     m+=`<div class="callout c-ok">✓ Verified before download: all ${data.verification.codeRowsWritten} figures from ${data.verification.accountsIncluded} mapped accounts were written to the return and re-checked in the generated file.</div>`;
   }
+  m+=`<div class="callout c-warn">Before submission: the return's Yes/No declarations and confirmation sections (and any TRA schedules such as capital allowances) cannot be derived from the uploaded documents — open the downloaded return and complete them manually.</div>`;
   $('genMsgs').innerHTML=m;
   // Prefer the persisted, streamed download (survives restart + avoids the
   // large-buffer proxy 503); fall back to the in-memory session route.

@@ -135,7 +135,9 @@ function classifyRow(row: unknown[]): {
   // year columns — the firm's "Account Description | 2023 | … | 2022" TBs — so
   // a data row whose balance equals a year number can't become a header.)
   if (yearCols.length && (cols.size >= 2 || (cols.size >= 1 && [...cols.values()].includes('name') && yearCols.length >= 2))) {
-    yearCols.sort((a, b) => b.year - a.year);
+    // Duplicate year headers (preliminary + final both headed "2024"): the
+    // RIGHTMOST wins — adjusted/final columns sit after the adjustments.
+    yearCols.sort((a, b) => b.year - a.year || b.c - a.c);
     for (const [c, k] of [...cols]) if (k === 'balance' || k === 'pyBalance') cols.delete(c);
     cols.set(yearCols[0].c, 'balance');
     if (yearCols[1]) cols.set(yearCols[1].c, 'pyBalance');
@@ -321,8 +323,15 @@ export function parseEtb(buffer: Buffer): ParsedEtb {
     });
   }
 
-  const sum = accounts.reduce((a, x) => a + x.cyBalance, 0);
+  // Zero-balance accounts (this year AND last) don't belong on the return —
+  // dropping them here keeps them out of mapping and the unmapped list.
+  // (Tester-reported: zero rows were imported and demanded manual attention.)
+  const live = accounts.filter((a) => a.cyBalance !== 0 || (a.pyBalance !== null && a.pyBalance !== 0));
+  const zeroDropped = accounts.length - live.length;
+  if (zeroDropped > 0) warnings.push(`${zeroDropped} zero-balance account(s) ignored (no current or prior-year balance).`);
+
+  const sum = live.reduce((a, x) => a + x.cyBalance, 0);
   if (Math.abs(sum) > 1) warnings.push(`ETB does not balance: net ${sum.toFixed(2)} (should be 0).`);
-  if (accounts.length === 0) throw new Error('Header row found but no account rows could be parsed.');
-  return { accounts, warnings, headerRow: best.row, sheetName: best.sheet };
+  if (live.length === 0) throw new Error('Header row found but no account rows could be parsed.');
+  return { accounts: live, warnings, headerRow: best.row, sheetName: best.sheet };
 }

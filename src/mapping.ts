@@ -107,6 +107,19 @@ const PROPOSALS: Array<{ kw: RegExp; cfrCode: number; sheet: CfrSheet; confidenc
   { kw: /trade creditor/i, cfrCode: 3101, sheet: 'B_Sheet', confidence: 0.85 },
   { kw: /accrual|payable|creditor|accrued/i, cfrCode: 3100, sheet: 'B_Sheet', confidence: 0.8 },
   { kw: /bank loan|overdraft|borrow/i, cfrCode: 3022, sheet: 'B_Sheet', confidence: 0.6 },
+  // Fixed-asset classes + their accumulated depreciation (tester-reported as
+  // unmapped). Codes are the per-class B_Sheet rows real returns populate
+  // (1389-1394, 1350-1353, 1373). Depreciation variants FIRST (first-match-wins).
+  { kw: /(?:furnitur|fixture|fitting).*deprec|deprec.*(?:furnitur|fixture|fitting)/i, cfrCode: 1394, sheet: 'B_Sheet', confidence: 0.75 },
+  { kw: /furnitur|fixture|fitting/i, cfrCode: 1393, sheet: 'B_Sheet', confidence: 0.75 },
+  { kw: /software.*(?:deprec|amortis)|(?:deprec|amortis).*software/i, cfrCode: 1392, sheet: 'B_Sheet', confidence: 0.75 },
+  { kw: /software/i, cfrCode: 1391, sheet: 'B_Sheet', confidence: 0.7 },
+  { kw: /(?:computer|electronic).*deprec|deprec.*(?:computer|electronic)/i, cfrCode: 1390, sheet: 'B_Sheet', confidence: 0.75 },
+  { kw: /computer|electronic equip/i, cfrCode: 1389, sheet: 'B_Sheet', confidence: 0.7 },
+  { kw: /(?:motor|vehicle).*deprec|deprec.*(?:motor|vehicle)/i, cfrCode: 1353, sheet: 'B_Sheet', confidence: 0.75 },
+  { kw: /^(?!.*running).*(?:motor|vehicle)/i, cfrCode: 1352, sheet: 'B_Sheet', confidence: 0.65 },
+  { kw: /(?:plant|machin).*deprec|deprec.*(?:plant|machin)/i, cfrCode: 1351, sheet: 'B_Sheet', confidence: 0.75 },
+  { kw: /air.?condition.*deprec|deprec.*air.?condition/i, cfrCode: 1373, sheet: 'B_Sheet', confidence: 0.75 },
   {
     kw: /plant (?:and|&)? ?machinery|machinery/i,
     cfrCode: 1350,

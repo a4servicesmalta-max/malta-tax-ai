@@ -7,6 +7,7 @@ import express from 'express';
 import multer from 'multer';
 import crypto from 'node:crypto';
 import path from 'node:path';
+import fs from 'node:fs';
 import type { EtbAccount, MappingProfile, MappingRule } from './domain';
 import { parseEtb } from './etb-parser';
 import { extractFsFiguresAny, tieCheck, type FsFigures } from './fs-tie-check';
@@ -113,6 +114,71 @@ export function createApp() {
     },
   });
   const sessions = new Map<string, Session>();
+
+  // Sessions survive a redeploy/restart: the parsed state + uploaded buffers
+  // are persisted at creation and lazily rehydrated on the first lookup after
+  // a restart. Mid-return "session not found" (tester-reported) was caused by
+  // deploys wiping the in-memory map while a preparer was on Step 2.
+  const SESS_DIR = path.join(process.env.DATA_DIR || (fs.existsSync('/data') ? '/data' : path.join(process.cwd(), 'data')), 'sessions');
+  fs.mkdirSync(SESS_DIR, { recursive: true });
+  // Ephemeral by design: sweep sessions older than 48h on boot.
+  for (const d of fs.readdirSync(SESS_DIR)) {
+    try {
+      const st = fs.statSync(path.join(SESS_DIR, d));
+      if (Date.now() - st.mtimeMs > 48 * 3600 * 1000) fs.rmSync(path.join(SESS_DIR, d), { recursive: true, force: true });
+    } catch {
+      /* sweep is best-effort */
+    }
+  }
+  function persistSession(id: string, s: Session): void {
+    try {
+      const dir = path.join(SESS_DIR, id);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'template.xlsx'), s.template);
+      if (s.priorBuffer) fs.writeFileSync(path.join(dir, 'prior.xlsx'), s.priorBuffer);
+      fs.writeFileSync(
+        path.join(dir, 'state.json'),
+        JSON.stringify({
+          accounts: s.accounts,
+          warnings: s.warnings,
+          templateCodes: s.templateCodes,
+          priorReview: s.priorReview ?? null,
+          fsFigures: s.fsFigures ?? null,
+          recalledFrom: s.recalledFrom ?? null,
+        })
+      );
+    } catch (e) {
+      console.warn('[sessions] persist failed:', (e as Error).message);
+    }
+  }
+  async function getSession(id: string): Promise<Session | undefined> {
+    const inMem = sessions.get(id);
+    if (inMem) return inMem;
+    // Rehydrate from disk (post-restart).
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return undefined;
+    const dir = path.join(SESS_DIR, id);
+    try {
+      const state = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
+      const template = fs.readFileSync(path.join(dir, 'template.xlsx'));
+      const priorBuffer = fs.existsSync(path.join(dir, 'prior.xlsx')) ? fs.readFileSync(path.join(dir, 'prior.xlsx')) : undefined;
+      const s: Session = {
+        accounts: state.accounts,
+        warnings: state.warnings,
+        template,
+        templateCodes: state.templateCodes,
+        codeKeys: new Set((state.templateCodes as TemplateCode[]).map((c) => `${c.sheet}:${c.code}`)),
+        priorBuffer,
+        prior: priorBuffer ? { codes: (await readPriorReturn(priorBuffer)).codes } : undefined,
+        priorReview: state.priorReview ?? undefined,
+        fsFigures: state.fsFigures ?? undefined,
+        recalledFrom: state.recalledFrom ?? null,
+      };
+      sessions.set(id, s);
+      return s;
+    } catch {
+      return undefined;
+    }
+  }
 
   // ---- Accounts + session auth ----
   // Every request through a protected page/API needs a valid user session cookie.
@@ -372,6 +438,7 @@ export function createApp() {
 
         const id = crypto.randomUUID();
         sessions.set(id, session);
+        persistSession(id, session);
         res.json({
           sessionId: id,
           accounts: parsed.accounts,
@@ -409,8 +476,8 @@ export function createApp() {
 
   // The tax computation working paper — reviewed by the preparer BEFORE the
   // return is filled. Same deterministic inputs as /generate, no file writes.
-  app.post('/api/session/:id/computation', (req, res) => {
-    const session = sessions.get(req.params.id);
+  app.post('/api/session/:id/computation', async (req, res) => {
+    const session = await getSession(req.params.id);
     if (!session) return res.status(404).json({ error: 'session not found' });
     try {
       const { rules, answers, excluded } = req.body as {
@@ -439,7 +506,7 @@ export function createApp() {
   // /computation). Never writes figures, never gates generation; env-gated —
   // returns available:false when no API key is configured.
   app.post('/api/session/:id/review', async (req, res) => {
-    const session = sessions.get(req.params.id);
+    const session = await getSession(req.params.id);
     if (!session) return res.status(404).json({ error: 'session not found' });
     try {
       const { rules, answers, excluded } = req.body as {
@@ -464,7 +531,7 @@ export function createApp() {
   });
 
   app.post('/api/session/:id/generate', async (req, res) => {
-    const session = sessions.get(req.params.id);
+    const session = await getSession(req.params.id);
     if (!session) return res.status(404).json({ error: 'session not found' });
     try {
       const { rules, answers, clientName, yearOfAssessment, excluded, priorReviewAcknowledged } = req.body as {
