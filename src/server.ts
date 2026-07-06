@@ -281,6 +281,7 @@ export function createApp() {
           if (fsRes.note) warnings.push(fsRes.note);
         }
         let priorCodes: Set<number> | undefined;
+        let priorValues: Map<string, number> | undefined;
         let priorReview: PriorReturnReview | undefined;
         if (files?.prior?.[0]) {
           session.priorBuffer = files.prior[0].buffer;
@@ -289,11 +290,17 @@ export function createApp() {
           session.priorReview = priorReview;
           const info = await readPriorReturn(files.prior[0].buffer);
           priorCodes = info.codes;
+          priorValues = new Map(
+            info.values
+              .filter((v) => v.value !== null && !v.computed && Math.abs(v.value as number) > 0.5)
+              .map((v) => [`${v.sheet}:${v.cfrCode}`, v.value as number])
+          );
           session.prior = { codes: info.codes };
         }
 
         const proposal = await proposeMappingAI(parsed.accounts, {
           priorYearCodes: priorCodes,
+          priorYearValues: priorValues,
           templateCodes,
         });
         const interview = buildInterview(parsed.accounts, {
@@ -507,6 +514,8 @@ export function createApp() {
         allWritesVerified: true,
       };
 
+      const sumCells = (sheet: string, lo: number, hi: number) =>
+        fill.codeCells.filter((c) => c.sheet === sheet && c.cfrCode >= lo && c.cfrCode <= hi).reduce((a, c) => a + c.amount, 0);
       const tie =
         session.fsFigures &&
         tieCheck(session.fsFigures, {
@@ -514,9 +523,12 @@ export function createApp() {
           // Asset-class codes only (sub-3000, consistent with prior-return.ts);
           // let signs net so contra-assets reduce the total and positive-balance
           // equity/liability codes (>=3000) are not miscounted as assets.
-          totalAssets: fill.codeCells
-            .filter((c) => c.sheet === 'B_Sheet' && c.cfrCode < 3000)
-            .reduce((a, c) => a + c.amount, 0),
+          totalAssets: sumCells('B_Sheet', 0, 2999),
+          // Line-by-line ties (magnitude-compared in tieCheck): revenue block
+          // 5000-5499, liabilities 3000-3799, equity 3800-3998.
+          revenue: sumCells('Income', 5000, 5499) || null,
+          totalLiabilities: sumCells('B_Sheet', 3000, 3799) || null,
+          totalEquity: sumCells('B_Sheet', 3800, 3998) || null,
         });
 
       const priorReviewWarnings = (session.priorReview?.findings ?? []).map(

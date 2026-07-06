@@ -16,6 +16,10 @@ const pdfParse = require('pdf-parse/lib/pdf-parse.js') as (b: Buffer) => Promise
 export interface FsFigures {
   netProfit: number | null;
   totalAssets: number | null;
+  /** Line-by-line extensions — optional so absent FS lines stay quiet. */
+  revenue?: number | null;
+  totalEquity?: number | null;
+  totalLiabilities?: number | null;
 }
 
 // Anchored to the whole trimmed label so note text ("the net profit margin")
@@ -25,6 +29,23 @@ export interface FsFigures {
 const NET_PROFIT_RE =
   /^\(?(?:profit|loss)\)?\s*(?:\/?\s*\(?(?:loss|profit)\)?)?\s*for the (?:year|period)$|^net (?:profit|loss)$/i;
 const TOTAL_ASSETS_RE = /^total assets$/i;
+
+/** All tie-able FS lines. "total equity(?! and)" keeps "Total equity and liabilities" out. */
+const FIGURE_LABELS: Record<keyof FsFigures, RegExp> = {
+  netProfit: NET_PROFIT_RE,
+  totalAssets: TOTAL_ASSETS_RE,
+  revenue: /^(?:total )?(?:revenue|turnover)$/i,
+  totalEquity: /^total (?:equity(?! and)|shareholders?'? (?:funds|equity))$/i,
+  totalLiabilities: /^total liabilities$/i,
+};
+const FIGURE_KEYS = Object.keys(FIGURE_LABELS) as Array<keyof FsFigures>;
+const emptyFigures = (): FsFigures => ({
+  netProfit: null,
+  totalAssets: null,
+  revenue: null,
+  totalEquity: null,
+  totalLiabilities: null,
+});
 
 /** Sheets likely to hold the income statement — scanned first so notes sheets cannot lock in a wrong figure. */
 const INCOME_SHEET_RE = /income|comprehensive|soci|p\s*&\s*l/i;
@@ -70,8 +91,7 @@ function parseAmount(tok: string): number | null {
  * numeric tokens on the line, run through the same note-column heuristic.
  */
 export function extractFiguresFromText(text: string): FsFigures {
-  let netProfit: number | null = null;
-  let totalAssets: number | null = null;
+  const out = emptyFigures();
   const lines = text.split(/\r?\n/).map((l) => l.trim());
   const numsOf = (line: string): number[] =>
     (line.match(/\(?-?€?\s?[\d,]+(?:\.\d+)?\)?/g) ?? [])
@@ -83,7 +103,7 @@ export function extractFiguresFromText(text: string): FsFigures {
     if (!line) continue;
     let nums = numsOf(line);
     const label = line.replace(/[\d,().€\s-]+$/g, '').trim();
-    if (!label || !(NET_PROFIT_RE.test(label) || TOTAL_ASSETS_RE.test(label))) continue;
+    if (!label || !FIGURE_KEYS.some((k) => FIGURE_LABELS[k].test(label))) continue;
     // Columnar PDFs often put the amounts on the following line(s): a matching
     // label with no figures borrows the first nearby numbers-only line.
     if (!nums.length) {
@@ -104,10 +124,11 @@ export function extractFiguresFromText(text: string): FsFigures {
     if (!nums.length) continue;
     const fig = pickRowFigure(nums);
     if (fig === undefined) continue;
-    if (netProfit === null && NET_PROFIT_RE.test(label)) netProfit = fig;
-    if (totalAssets === null && TOTAL_ASSETS_RE.test(label)) totalAssets = fig;
+    for (const k of FIGURE_KEYS) {
+      if (out[k] === null && FIGURE_LABELS[k].test(label)) out[k] = fig;
+    }
   }
-  return { netProfit, totalAssets };
+  return out;
 }
 
 export function extractFsFigures(buffer: Buffer): FsFigures {
@@ -117,8 +138,7 @@ export function extractFsFigures(buffer: Buffer): FsFigures {
     ...wb.SheetNames.filter((n) => INCOME_SHEET_RE.test(n)),
     ...wb.SheetNames.filter((n) => !INCOME_SHEET_RE.test(n)),
   ];
-  let netProfit: number | null = null;
-  let totalAssets: number | null = null;
+  const out = emptyFigures();
   for (const name of ordered) {
     const rows: unknown[][] = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null });
     for (const row of rows) {
@@ -126,11 +146,12 @@ export function extractFsFigures(buffer: Buffer): FsFigures {
       if (!label) continue;
       const fig = pickRowFigure(row);
       if (fig === undefined) continue;
-      if (netProfit === null && NET_PROFIT_RE.test(label.trim())) netProfit = fig;
-      if (totalAssets === null && TOTAL_ASSETS_RE.test(label.trim())) totalAssets = fig;
+      for (const k of FIGURE_KEYS) {
+        if (out[k] === null && FIGURE_LABELS[k].test(label.trim())) out[k] = fig;
+      }
     }
   }
-  return { netProfit, totalAssets };
+  return out;
 }
 
 /**
@@ -184,7 +205,9 @@ export type TieCheckStatus = 'tied' | 'mismatch' | 'not-compared';
 export interface TieResult {
   ok: boolean;
   issues: string[];
-  checks: { netProfit: TieCheckStatus; totalAssets: TieCheckStatus };
+  checks: { netProfit: TieCheckStatus; totalAssets: TieCheckStatus } & Partial<
+    Record<'revenue' | 'totalEquity' | 'totalLiabilities', TieCheckStatus>
+  >;
 }
 
 const TOL = 1; // €1 tolerance for rounding
@@ -232,5 +255,31 @@ export function tieCheck(fs: FsFigures, etbDerived: FsFigures): TieResult {
     }
   }
 
-  return { ok: netProfit !== 'mismatch' && totalAssets !== 'mismatch', issues, checks: { netProfit, totalAssets } };
+  // Line-by-line extensions: compared on magnitude (FS statements print
+  // positives; the mapped derivation is signed). Skipped silently when the FS
+  // doesn't carry the line at all — only a real disagreement makes noise.
+  const checks: TieResult['checks'] = { netProfit, totalAssets };
+  const extended: Array<{ key: 'revenue' | 'totalEquity' | 'totalLiabilities'; label: string }> = [
+    { key: 'revenue', label: 'Revenue' },
+    { key: 'totalEquity', label: 'Total equity' },
+    { key: 'totalLiabilities', label: 'Total liabilities' },
+  ];
+  let extendedMismatch = false;
+  for (const { key, label } of extended) {
+    const f = fs[key];
+    const e = etbDerived[key];
+    if (f === null || f === undefined || e === null || e === undefined) continue;
+    const d = Math.abs(Math.abs(f) - Math.abs(e));
+    if (d > TOL) {
+      checks[key] = 'mismatch';
+      extendedMismatch = true;
+      issues.push(
+        `${label} does not tie: FS €${Math.abs(f).toFixed(2)} vs return €${Math.abs(e).toFixed(2)} (difference €${d.toFixed(2)}).`
+      );
+    } else {
+      checks[key] = 'tied';
+    }
+  }
+
+  return { ok: netProfit !== 'mismatch' && totalAssets !== 'mismatch' && !extendedMismatch, issues, checks };
 }

@@ -202,6 +202,12 @@ export interface ProposalContext {
   /** CfR codes present on the client's prior-year return — small confidence boost. */
   priorYearCodes?: Set<number>;
   /**
+   * Filed values per code line on the prior-year return (`sheet:code` -> value).
+   * Enables value-fingerprint matching: an ETB account whose PRIOR-year balance
+   * equals the value the firm filed on a line last year belongs on that line.
+   */
+  priorYearValues?: Map<string, number>;
+  /**
    * The data-entry code rows that actually exist in the uploaded template.
    * When given, proposals with codes not on the template are DROPPED (the
    * account shows as unmapped for the preparer) — a visibly unmapped row is
@@ -209,6 +215,48 @@ export interface ProposalContext {
    * return empty.
    */
   templateCodes?: import('./template-codes').TemplateCode[];
+}
+
+/**
+ * Prior-year value-fingerprint matching: if an account's PY balance equals (±€1)
+ * the value the firm actually filed on exactly ONE line last year — and no other
+ * account shares that balance — that account belongs on that line. Deterministic
+ * and explainable ("you filed this exact figure there last year"); the strongest
+ * signal available for repeat clients. Ambiguous fingerprints are skipped:
+ * a wrong-but-confident rule is worse than a gap the preparer fills.
+ */
+export function fingerprintRules(
+  accounts: EtbAccount[],
+  priorYearValues: Map<string, number>
+): ProposedRule[] {
+  const TOL = 1;
+  // Ignore near-zero fingerprints — dozens of lines carry 0.
+  const usable = [...priorYearValues.entries()].filter(([, v]) => Math.abs(v) > TOL);
+  const rules: ProposedRule[] = [];
+  const claimedCodes = new Set<string>();
+  for (const acc of accounts) {
+    if (acc.pyBalance === null || Math.abs(acc.pyBalance) <= TOL) continue;
+    const matches = usable.filter(([, v]) => Math.abs(Math.abs(v) - Math.abs(acc.pyBalance as number)) <= TOL);
+    if (matches.length !== 1) continue; // none or ambiguous
+    const [key] = matches[0];
+    if (claimedCodes.has(key)) continue; // two accounts share the balance — ambiguous
+    const twin = accounts.find(
+      (a) =>
+        a !== acc &&
+        a.pyBalance !== null &&
+        Math.abs(Math.abs(a.pyBalance) - Math.abs(acc.pyBalance as number)) <= TOL
+    );
+    if (twin) continue;
+    const [sheet, codeStr] = key.split(':');
+    claimedCodes.add(key);
+    rules.push({
+      ledgerCode: acc.accountCode,
+      cfrCode: Number(codeStr),
+      sheet: sheet as CfrSheet,
+      confidence: 0.99,
+    });
+  }
+  return rules;
 }
 
 export function proposeMapping(

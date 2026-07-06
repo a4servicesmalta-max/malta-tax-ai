@@ -40,13 +40,15 @@ export async function validatePair(
   // Production behavior for repeat clients: prime with the codes populated on
   // the client's prior-year return.
   let priorYearCodes: Set<number> | undefined;
+  let priorYearValues: Map<string, number> | undefined;
   if (priorBuf) {
     const priorVals = (await readCfrValues(priorBuf, ['B_Sheet', 'Income'])).filter(
       (v) => v.value !== null && !v.computed && Math.abs(v.value as number) > 0.5
     );
     priorYearCodes = new Set(priorVals.map((v) => v.cfrCode));
+    priorYearValues = new Map(priorVals.map((v) => [`${v.sheet}:${v.cfrCode}`, v.value as number]));
   }
-  const proposal = await proposeMappingAI(etb.accounts, { templateCodes: codes, priorYearCodes });
+  const proposal = await proposeMappingAI(etb.accounts, { templateCodes: codes, priorYearCodes, priorYearValues });
   const mapped = applyMapping(etb.accounts, { rules: proposal.rules });
   const byKey = new Map(mapped.codeCells.map((c) => [`${c.sheet}:${c.cfrCode}`, c.amount]));
 

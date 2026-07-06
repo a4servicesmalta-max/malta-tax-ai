@@ -5,7 +5,7 @@
  * Grounding: prior-year code set + firm-corpus example mappings in the prompt.
  */
 import type { EtbAccount, ProposedRule } from './domain';
-import { proposeMapping, type ProposalContext } from './mapping';
+import { proposeMapping, fingerprintRules, type ProposalContext } from './mapping';
 import { isAiConfigured, callAnthropic, type AiAuthOptions } from './ai-auth';
 import { codeKeySet, type TemplateCode } from './template-codes';
 import { commonCodeKeys } from './code-usage';
@@ -54,12 +54,33 @@ function templateCodesPrompt(codes: TemplateCode[]): string {
     .join('\n\n');
 }
 
+/**
+ * Prior-year value fingerprints override any other proposal for their accounts:
+ * "the firm filed this exact figure on that line last year" is filed fact, not
+ * model opinion. Template-validity still applies.
+ */
+function overlayFingerprints(rules: ProposedRule[], accounts: EtbAccount[], ctx: ProposalContext): ProposedRule[] {
+  if (!ctx.priorYearValues?.size) return rules;
+  const fp = fingerprintRules(accounts, ctx.priorYearValues);
+  if (!fp.length) return rules;
+  const validKeys = ctx.templateCodes?.length ? codeKeySet(ctx.templateCodes) : null;
+  const byLedger = new Map(rules.map((r) => [r.ledgerCode, r]));
+  for (const r of fp) {
+    if (validKeys && !validKeys.has(`${r.sheet}:${r.cfrCode}`)) continue;
+    byLedger.set(r.ledgerCode, r);
+  }
+  return [...byLedger.values()];
+}
+
 export async function proposeMappingAI(
   accounts: EtbAccount[],
   ctx: ProposalContext,
   opts: AiMapperOptions = {}
 ): Promise<AiProposal> {
-  const fallback = (): AiProposal => ({ rules: proposeMapping(accounts, ctx).rules, source: 'heuristic' });
+  const fallback = (): AiProposal => ({
+    rules: overlayFingerprints(proposeMapping(accounts, ctx).rules, accounts, ctx),
+    source: 'heuristic',
+  });
   if (!isAiConfigured(opts)) return fallback();
 
   try {
@@ -127,7 +148,7 @@ export async function proposeMappingAI(
         r.confidence >= 0 &&
         r.confidence <= 1
     );
-    return rules.length ? { rules, source: 'ai' } : fallback();
+    return rules.length ? { rules: overlayFingerprints(rules, accounts, ctx), source: 'ai' } : fallback();
   } catch (e) {
     const err = e as { status?: number; message?: string };
     console.warn(`[ai-mapper] failed, using heuristic: status=${err?.status ?? '?'} ${String(err?.message ?? '').slice(0, 160)}`);
