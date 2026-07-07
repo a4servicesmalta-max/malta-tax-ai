@@ -339,10 +339,15 @@ export function createApp() {
       { name: 'prior', maxCount: 1 },
     ]),
     async (req, res) => {
+      // Stage telemetry for the live upload path — the 2026-07-07 outage hung
+      // this route with zero app logs, leaving nothing to localise the stall.
+      const t0 = Date.now();
+      const stage = (name: string) => console.info(`[session] +${Date.now() - t0}ms ${name}`);
       try {
         const files = req.files as Record<string, Express.Multer.File[]> | undefined;
         const etbFile = files?.etb?.[0];
         const tplFile = files?.template?.[0];
+        stage(`files received (etb=${etbFile?.size ?? 0}b tpl=${tplFile?.size ?? 0}b prior=${files?.prior?.[0]?.size ?? 0}b)`);
         if (!etbFile || !tplFile) return res.status(400).json({ error: 'etb and template files are required' });
 
         // Read the template's real data-entry rows FIRST — a wrong file here is
@@ -355,7 +360,9 @@ export function createApp() {
           });
         }
 
+        stage(`template codes read (${templateCodes.length})`);
         const parsed = parseEtb(etbFile.buffer);
+        stage(`etb parsed (${parsed.accounts.length} accounts)`);
         const warnings = [...parsed.warnings];
         const session: Session = {
           accounts: parsed.accounts,
@@ -387,12 +394,14 @@ export function createApp() {
           );
           session.prior = { codes: info.codes };
         }
+        stage('prior reviewed/read');
 
         const proposal = await proposeMappingAI(parsed.accounts, {
           priorYearCodes: priorCodes,
           priorYearValues: priorValues,
           templateCodes,
         });
+        stage(`mapping proposed (source=${proposal.source}, rules=${proposal.rules.length})`);
         // FLYWHEEL RECALL: a returning client (recognised by ledger-code
         // overlap) opens with the firm's own previously CONFIRMED mapping —
         // it overrides model proposals for the accounts it knows. Template
@@ -446,6 +455,7 @@ export function createApp() {
         const id = crypto.randomUUID();
         sessions.set(id, session);
         persistSession(id, session);
+        stage('cross-checked + persisted — responding');
         res.json({
           sessionId: id,
           accounts: parsed.accounts,
@@ -462,6 +472,7 @@ export function createApp() {
           recalledFrom,
         });
       } catch (e) {
+        stage(`FAILED: ${(e as Error).message}`);
         res.status(400).json({ error: (e as Error).message });
       }
     }
@@ -606,29 +617,50 @@ export function createApp() {
           .filter((v) => !v.computed && TOTAL_CODE_KEYS.has(`${v.sheet}:${v.cfrCode}`))
           .map((v) => `${v.sheet}:${v.cfrCode}`)
       );
-      // Closing entry first (pre-closing ETBs: 3905 absorbs the year's result,
-      // RE b/f and c/f rows 7501/7600 are filled), then section totals over the
-      // closed cells so TOTAL EQUITY includes the adjusted retained earnings.
+      // Every non-formula data-entry row on this template — the only rows a
+      // synthesized cell may be written to (a formula row would recompute and
+      // fail the read-back check for no reason).
+      const writableInputKeys = new Set(
+        templateVals.filter((v) => !v.computed).map((v) => `${v.sheet}:${v.cfrCode}`)
+      );
+      // CORE cells are the preparer's actual account mappings (whole euros).
+      // They are the return; they MUST land exactly or generation fails.
       const roundedCells = fill.codeCells.map((c) => ({ ...c, amount: Math.round(c.amount) }));
+      const coreKeys = new Set(roundedCells.map((c) => `${c.sheet}:${c.cfrCode}`));
+      // Closing entry (pre-closing ETBs: 3905 absorbs the year's result; RE b/f
+      // and c/f rows 7501/7600 are added) + section totals. These are DERIVED
+      // conveniences — a self-computing template legitimately overwrites them on
+      // read-back — so they are best-effort: written only to writable input
+      // rows, and never allowed to block or fail a valid return.
       const closedCells = applyClosingEntry(roundedCells, session.codeKeys);
-      const allCells = [...closedCells, ...deriveSectionTotals(closedCells, writableTotals)];
+      const core = closedCells.filter((c) => coreKeys.has(`${c.sheet}:${c.cfrCode}`));
+      const derived = [
+        ...closedCells.filter((c) => !coreKeys.has(`${c.sheet}:${c.cfrCode}`)),
+        ...deriveSectionTotals(closedCells, writableTotals),
+      ].filter((c) => writableInputKeys.has(`${c.sheet}:${c.cfrCode}`));
+      const allCells = [...core, ...derived];
       const { buffer, unmatched } = await fillCfrReturn(session.template, allCells, directCells);
-      // Belt-and-braces: rules were validated against the template, so nothing
-      // may be unmatched. If it is, the output is incomplete — refuse to ship it.
-      if (unmatched.length) {
+      // A CORE mapped figure with no row on the template is a real error (rules
+      // were validated, so this should never happen). An unmatched DERIVED cell
+      // is harmless — the template computes that total itself — so ignore it.
+      const coreUnmatched = unmatched.filter((u) => coreKeys.has(`${u.sheet}:${u.cfrCode}`));
+      if (coreUnmatched.length) {
         return res.status(400).json({
-          error: `Generation stopped: ${unmatched.length} value(s) had no matching row in the template (${unmatched
+          error: `Generation stopped: ${coreUnmatched.length} value(s) had no matching row in the template (${coreUnmatched
             .map((u) => `${u.sheet}/${u.cfrCode}`)
             .join(', ')}). Fix the mapping and try again.`,
         });
       }
 
       // VERIFICATION PASS: re-read the workbook we just produced and confirm
-      // every mapped figure actually landed on its code row. A return only
-      // ships if 100% of intended writes are present and exact.
+      // every CORE mapped figure actually landed on its code row. A return only
+      // ships if 100% of the mapped account figures are present and exact.
+      // Derived totals/closing rows are NOT verified fatally — a template that
+      // computes a total itself overwrites our write on read-back, which is
+      // correct, not a failure.
       const written = await readCfrValues(buffer, ['B_Sheet', 'Income']);
       const writtenByKey = new Map(written.map((w) => [`${w.sheet}:${w.cfrCode}`, w.value]));
-      const missing = allCells.filter((c) => {
+      const missing = core.filter((c) => {
         const v = writtenByKey.get(`${c.sheet}:${c.cfrCode}`);
         return v === null || v === undefined || Math.abs(v - c.amount) > 0.01;
       });

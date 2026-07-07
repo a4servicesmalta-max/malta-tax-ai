@@ -108,6 +108,27 @@ function oauthClient(token: string): Anthropic {
 }
 
 /**
+ * Absolute ceiling on one advisory call, SDK timeouts included. Live evidence
+ * (2026-07-07): requests idled inside messages.create without the SDK timeout
+ * firing on the deployed runtime, so the route never responded. This race is
+ * runtime-agnostic — whatever the SDK does, callers get a rejection by the
+ * deadline and degrade to heuristics.
+ */
+const HARD_DEADLINE_MS = 200_000;
+
+function withDeadline<T>(work: Promise<T>, label: string): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label} exceeded ${HARD_DEADLINE_MS / 1000}s hard deadline`)),
+      HARD_DEADLINE_MS
+    );
+    timer.unref(); // never hold the process open for a watchdog
+  });
+  return Promise.race([work, deadline]).finally(() => clearTimeout(timer!)) as Promise<T>;
+}
+
+/**
  * Send one messages.create with Max-first, API-key-fallback auth. Throws only
  * when the configured path(s) all fail; callers already degrade on throw.
  */
@@ -118,8 +139,16 @@ export async function callAnthropic(
   if (opts.createMessage) return opts.createMessage(params);
   const token = resolveOAuthToken(opts);
   const key = resolveApiKey(opts);
-  return runWithFallback(params, {
-    oauth: token ? (p) => oauthClient(token).messages.create(p as never) as unknown as Promise<AnthropicMessage> : undefined,
-    api: key ? (p) => new Anthropic({ apiKey: key, ...BOUNDED }).messages.create(p as never) as unknown as Promise<AnthropicMessage> : undefined,
-  });
+  const t0 = Date.now();
+  try {
+    return await withDeadline(
+      runWithFallback(params, {
+        oauth: token ? (p) => oauthClient(token).messages.create(p as never) as unknown as Promise<AnthropicMessage> : undefined,
+        api: key ? (p) => new Anthropic({ apiKey: key, ...BOUNDED }).messages.create(p as never) as unknown as Promise<AnthropicMessage> : undefined,
+      }),
+      'anthropic call'
+    );
+  } finally {
+    console.info(`[ai] messages.create settled in ${Date.now() - t0}ms`);
+  }
 }
