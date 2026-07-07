@@ -90,11 +90,20 @@ export async function runWithFallback(
   throw new Error('No Anthropic credentials configured.');
 }
 
+/**
+ * Advisory calls must be BOUNDED: the SDK's 10-min default timeout × retries
+ * left /api/session awaiting a black-holed API response for 30+ minutes with
+ * the heuristic fallback unreachable (live outage, 2026-07-07). 90s per
+ * attempt × 2 attempts caps AI latency at ~3 min before callers degrade.
+ */
+const BOUNDED = { timeout: 90_000, maxRetries: 1 } as const;
+
 function oauthClient(token: string): Anthropic {
   return new Anthropic({
     apiKey: null, // suppress x-api-key — sending it alongside the bearer token breaks subscription auth
     authToken: token,
     defaultHeaders: { 'anthropic-beta': 'oauth-2025-04-20' },
+    ...BOUNDED,
   });
 }
 
@@ -111,6 +120,6 @@ export async function callAnthropic(
   const key = resolveApiKey(opts);
   return runWithFallback(params, {
     oauth: token ? (p) => oauthClient(token).messages.create(p as never) as unknown as Promise<AnthropicMessage> : undefined,
-    api: key ? (p) => new Anthropic({ apiKey: key }).messages.create(p as never) as unknown as Promise<AnthropicMessage> : undefined,
+    api: key ? (p) => new Anthropic({ apiKey: key, ...BOUNDED }).messages.create(p as never) as unknown as Promise<AnthropicMessage> : undefined,
   });
 }
