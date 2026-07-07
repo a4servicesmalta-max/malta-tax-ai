@@ -63,10 +63,17 @@ export function withClaudeCodeIdentity(params: Record<string, unknown>): Record<
   return params;
 }
 
-/** Max maxed out (429) or the OAuth token is unusable (401/403) → try the API key instead. */
+/**
+ * Try the API key when the Max leg is maxed out (429), unusable (401/403), or
+ * simply unreachable — timeouts, connection failures and deadline trips have
+ * no status. The one case NOT worth retrying on the paid key is a 400: an
+ * invalid request fails identically on both legs.
+ * Live evidence (2026-07-07): the Max leg hung rather than erroring, so a
+ * status-code allowlist alone left the API key unused during the outage.
+ */
 export function shouldFallBackToApiKey(err: unknown): boolean {
   const status = (err as { status?: number } | null | undefined)?.status;
-  return status === 429 || status === 401 || status === 403;
+  return status !== 400;
 }
 
 /**
@@ -108,21 +115,21 @@ function oauthClient(token: string): Anthropic {
 }
 
 /**
- * Absolute ceiling on one advisory call, SDK timeouts included. Live evidence
- * (2026-07-07): requests idled inside messages.create without the SDK timeout
- * firing on the deployed runtime, so the route never responded. This race is
- * runtime-agnostic — whatever the SDK does, callers get a rejection by the
- * deadline and degrade to heuristics.
+ * Hard deadlines, SDK timeouts included. Live evidence (2026-07-07): requests
+ * idled inside messages.create without the SDK timeout firing on the deployed
+ * runtime, so the route never responded. The races are runtime-agnostic —
+ * whatever the SDK does, callers get a rejection by the deadline.
+ *
+ * PER-LEG (100s): bounds one auth leg so a hung Max call still leaves budget
+ * for the API-key fallback. TOTAL (220s): backstop over the whole chain.
  */
-const HARD_DEADLINE_MS = 200_000;
+const LEG_DEADLINE_MS = 100_000;
+const TOTAL_DEADLINE_MS = 220_000;
 
-function withDeadline<T>(work: Promise<T>, label: string): Promise<T> {
+function withDeadline<T>(work: Promise<T>, label: string, ms: number): Promise<T> {
   let timer: NodeJS.Timeout;
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`${label} exceeded ${HARD_DEADLINE_MS / 1000}s hard deadline`)),
-      HARD_DEADLINE_MS
-    );
+    timer = setTimeout(() => reject(new Error(`${label} exceeded ${ms / 1000}s hard deadline`)), ms);
     timer.unref(); // never hold the process open for a watchdog
   });
   return Promise.race([work, deadline]).finally(() => clearTimeout(timer!)) as Promise<T>;
@@ -143,10 +150,25 @@ export async function callAnthropic(
   try {
     return await withDeadline(
       runWithFallback(params, {
-        oauth: token ? (p) => oauthClient(token).messages.create(p as never) as unknown as Promise<AnthropicMessage> : undefined,
-        api: key ? (p) => new Anthropic({ apiKey: key, ...BOUNDED }).messages.create(p as never) as unknown as Promise<AnthropicMessage> : undefined,
+        oauth: token
+          ? (p) =>
+              withDeadline(
+                oauthClient(token).messages.create(p as never) as unknown as Promise<AnthropicMessage>,
+                'anthropic oauth leg',
+                LEG_DEADLINE_MS
+              )
+          : undefined,
+        api: key
+          ? (p) =>
+              withDeadline(
+                new Anthropic({ apiKey: key, ...BOUNDED }).messages.create(p as never) as unknown as Promise<AnthropicMessage>,
+                'anthropic api-key leg',
+                LEG_DEADLINE_MS
+              )
+          : undefined,
       }),
-      'anthropic call'
+      'anthropic call',
+      TOTAL_DEADLINE_MS
     );
   } finally {
     console.info(`[ai] messages.create settled in ${Date.now() - t0}ms`);

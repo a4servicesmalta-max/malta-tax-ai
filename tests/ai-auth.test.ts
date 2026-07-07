@@ -67,13 +67,16 @@ describe('withClaudeCodeIdentity', () => {
 });
 
 describe('shouldFallBackToApiKey', () => {
-  it('falls back on maxed-out (429) and unusable-token (401/403), not on other errors', () => {
+  it('falls back on everything except an invalid request (400) — incl. hangs, which carry no status', () => {
     expect(shouldFallBackToApiKey(err(429))).toBe(true);
     expect(shouldFallBackToApiKey(err(401))).toBe(true);
     expect(shouldFallBackToApiKey(err(403))).toBe(true);
+    expect(shouldFallBackToApiKey(err(500))).toBe(true);
+    // timeout / connection failure / hard-deadline trip: no status attached
+    expect(shouldFallBackToApiKey(new Error('anthropic oauth leg exceeded 100s hard deadline'))).toBe(true);
+    expect(shouldFallBackToApiKey(new Error('Connection error.'))).toBe(true);
+    // a 400 fails identically on the paid key — don't bill for the same failure
     expect(shouldFallBackToApiKey(err(400))).toBe(false);
-    expect(shouldFallBackToApiKey(err(500))).toBe(false);
-    expect(shouldFallBackToApiKey(new Error('network'))).toBe(false);
   });
 });
 
@@ -99,12 +102,21 @@ describe('runWithFallback', () => {
     expect(api.mock.calls[0][0].system).toBe('S');
   });
 
-  it('does NOT fall back on a non-maxed-out error — it propagates', async () => {
+  it('falls back to the API key when the Max leg HANGS past its deadline (statusless error)', async () => {
     const oauth = vi.fn(async () => {
-      throw err(500);
+      throw new Error('anthropic oauth leg exceeded 100s hard deadline');
     });
     const api = vi.fn(async () => ok('api'));
-    await expect(runWithFallback({}, { oauth, api })).rejects.toMatchObject({ status: 500 });
+    const res = await runWithFallback({}, { oauth, api });
+    expect(res).toEqual(ok('api'));
+  });
+
+  it('does NOT fall back on an invalid request (400) — it propagates without billing the key', async () => {
+    const oauth = vi.fn(async () => {
+      throw err(400);
+    });
+    const api = vi.fn(async () => ok('api'));
+    await expect(runWithFallback({}, { oauth, api })).rejects.toMatchObject({ status: 400 });
     expect(api).not.toHaveBeenCalled();
   });
 
