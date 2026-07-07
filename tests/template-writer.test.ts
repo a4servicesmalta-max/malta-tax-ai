@@ -95,3 +95,34 @@ describe('fillCfrReturn', () => {
     expect(wb).toContain('fullCalcOnLoad="1"');
   });
 });
+
+describe('fillCfrReturn — stale residue clearing', () => {
+  it('blanks typed values on cleared rows while writes land, keeping the cell and formulas', async () => {
+    const tpl = await syntheticCfrWorkbook({
+      bSheet: [
+        { row: 10, code: 2150, value: 999 }, // stale preparer figure — must be blanked
+        { row: 11, code: 3801 },
+      ],
+      income: [],
+    });
+    const { buffer, unmatched } = await fillCfrReturn(
+      tpl,
+      [{ sheet: 'B_Sheet', cfrCode: 3801, amount: -500 }],
+      [],
+      [{ sheet: 'B_Sheet', cfrCode: 2150 }]
+    );
+    expect(unmatched).toEqual([]);
+    const zip = await JSZip.loadAsync(buffer);
+    const b = await zip.file('xl/worksheets/sheet1.xml')!.async('string');
+    expect(b).toContain('<c r="E10"/>'); // value gone, cell (and style slot) kept
+    expect(b).not.toContain('<v>999</v>');
+    expect(b).toContain('<c r="E11"><v>-500</v></c>');
+    expect(b).toContain('<f>SUM(E10)</f>'); // formulas untouched
+  });
+
+  it('ignores clear targets with no matching row instead of reporting unmatched', async () => {
+    const tpl = await syntheticCfrWorkbook({ bSheet: [{ row: 10, code: 2150 }], income: [] });
+    const { unmatched } = await fillCfrReturn(tpl, [], [], [{ sheet: 'B_Sheet', cfrCode: 9999 }]);
+    expect(unmatched).toEqual([]);
+  });
+});

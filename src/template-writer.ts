@@ -138,6 +138,20 @@ function setCell(sheetXml: string, ref: string, value: number | string, p: strin
   return sheetXml.replace(rowRe, (_all, open, _inner, close) => open + inner + close);
 }
 
+/**
+ * Blank a cell's VALUE while preserving the cell (and its style). Used to
+ * clear preparer-typed figures left in a non-blank "template": stale values on
+ * rows the engine did not write would otherwise survive into the produced
+ * return and silently double-count against the engine's own figures.
+ */
+function clearCell(sheetXml: string, ref: string, p: string): string {
+  const cellRe = new RegExp(`<${p}c\\b[^>]*\\br="${ref}"[^>]*?(?:/>|>[\\s\\S]*?</${p}c>)`);
+  const existing = sheetXml.match(cellRe);
+  if (!existing) return sheetXml; // nothing there — already blank
+  const style = attr(existing[0], 's');
+  return sheetXml.replace(cellRe, `<${p}c r="${ref}"${style ? ` s="${style}"` : ''}/>`);
+}
+
 /** Force Excel to fully recalculate when the file is opened. */
 function setFullCalcOnLoad(wbXml: string): string {
   const p = detectPrefix(wbXml);
@@ -162,7 +176,9 @@ function setFullCalcOnLoad(wbXml: string): string {
 export async function fillCfrReturn(
   templateBuffer: Buffer,
   codeCells: CfrCodeCell[],
-  directCells: CfrDirectCell[] = []
+  directCells: CfrDirectCell[] = [],
+  /** Code rows whose typed template values must be BLANKED (stale residue on a non-blank template). */
+  clearCodeCells: Array<{ sheet: string; cfrCode: number }> = []
 ): Promise<FillResult> {
   const zip = await JSZip.loadAsync(templateBuffer);
   const wbFile = zip.file(WORKBOOK);
@@ -173,12 +189,14 @@ export async function fillCfrReturn(
   const relsXml = await relsFile.async('string');
   const pathMap = sheetPathMap(wbXml, relsXml);
 
-  type Write = { ref?: string; code?: number; value: number | string };
+  type Write = { ref?: string; code?: number; value: number | string; clear?: boolean };
   const bySheet = new Map<string, Write[]>();
   const add = (sheet: string, w: Write) => {
     if (!bySheet.has(sheet)) bySheet.set(sheet, []);
     bySheet.get(sheet)!.push(w);
   };
+  // Clears first: a row must never end up cleared after being written.
+  for (const c of clearCodeCells) add(c.sheet, { code: c.cfrCode, value: 0, clear: true });
   for (const c of codeCells) add(c.sheet, { code: c.cfrCode, value: c.amount });
   for (const d of directCells) add(d.sheet, { ref: d.ref, value: d.value });
 
@@ -195,12 +213,14 @@ export async function fillCfrReturn(
       if (!ref && w.code != null) {
         const row = rowOfCode(xml, w.code, p);
         if (row == null) {
-          unmatched.push({ sheet, cfrCode: w.code });
+          // A clear target that no longer resolves is already effectively blank.
+          if (!w.clear) unmatched.push({ sheet, cfrCode: w.code });
           continue;
         }
         ref = `${VALUE_COL}${row}`;
       }
-      if (ref) xml = setCell(xml, ref, w.value, p);
+      if (!ref) continue;
+      xml = w.clear ? clearCell(xml, ref, p) : setCell(xml, ref, w.value, p);
     }
     zip.file(path, xml);
   }

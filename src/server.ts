@@ -22,7 +22,7 @@ import {
 } from './prior-return';
 import { proposeMappingAI } from './ai-mapper';
 import { applyMapping, netProfitFromMapping, deriveSectionTotals, applyClosingEntry, TOTAL_CODE_KEYS, sheetAllowed } from './mapping';
-import { recallMapping, rememberMapping } from './mapping-memory';
+import { recallMapping, rememberMapping, seedFromRepoIfEmpty } from './mapping-memory';
 import { buildInterview, fillsFromAnswers } from './interview';
 import { computeTax } from './tax-computation';
 import { reasonablenessReview } from './reasonableness-review';
@@ -63,6 +63,7 @@ interface Session {
 
 export function createApp() {
   bootstrapAdmin(); // create the env-configured admin account if missing (idempotent)
+  seedFromRepoIfEmpty(); // flywheel: corpus-learned mappings onto a fresh data disk (idempotent)
   const app = express();
   app.set('trust proxy', 1); // behind Render/Railway proxy: real client IP + protocol
   app.use(express.json({ limit: '5mb' }));
@@ -639,7 +640,18 @@ export function createApp() {
         ...deriveSectionTotals(closedCells, writableTotals),
       ].filter((c) => writableInputKeys.has(`${c.sheet}:${c.cfrCode}`));
       const allCells = [...core, ...derived];
-      const { buffer, unmatched } = await fillCfrReturn(session.template, allCells, directCells);
+      // STALE RESIDUE: typed values on input rows we are NOT writing (a
+      // non-blank "template" — e.g. a prior-year filed return re-used as the
+      // upload) would survive into the produced workbook and double-count
+      // against the engine's figures. Blank them.
+      const allKeys = new Set(allCells.map((c) => `${c.sheet}:${c.cfrCode}`));
+      const staleRows = templateVals
+        .filter((v) => !v.computed && v.value !== null && !allKeys.has(`${v.sheet}:${v.cfrCode}`))
+        .map((v) => ({ sheet: v.sheet, cfrCode: v.cfrCode }));
+      if (staleRows.length) {
+        console.info(`[generate] non-blank template: clearing ${staleRows.length} stale typed value(s)`);
+      }
+      const { buffer, unmatched } = await fillCfrReturn(session.template, allCells, directCells, staleRows);
       // A CORE mapped figure with no row on the template is a real error (rules
       // were validated, so this should never happen). An unmatched DERIVED cell
       // is harmless — the template computes that total itself — so ignore it.
@@ -671,9 +683,23 @@ export function createApp() {
             .join(', ')}). The return was NOT produced — please report this.`,
         });
       }
+      // Stale rows must read back BLANK — a survivor would double-count
+      // against the mapped figures the moment Excel recalculates.
+      const staleSurvivors = staleRows.filter((s) => {
+        const v = writtenByKey.get(`${s.sheet}:${s.cfrCode}`);
+        return v !== null && v !== undefined;
+      });
+      if (staleSurvivors.length) {
+        return res.status(500).json({
+          error: `Verification failed: ${staleSurvivors.length} stale template value(s) survived clearing (${staleSurvivors
+            .map((m) => `${m.sheet}/${m.cfrCode}`)
+            .join(', ')}). The return was NOT produced — please report this.`,
+        });
+      }
       const verification = {
         accountsIncluded: fill.applied.size,
         codeRowsWritten: allCells.length,
+        staleValuesCleared: staleRows.length,
         allWritesVerified: true,
       };
 

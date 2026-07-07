@@ -88,3 +88,15 @@ describe('consumeCredit', () => {
     updateUser(u.id, { credits: 0 });
   });
 });
+
+describe('verifyEmailHtml', () => {
+  it('renders a branded HTML email carrying the activation link twice (button + fallback)', async () => {
+    const { verifyEmailHtml } = await import('../src/accounts');
+    const html = verifyEmailHtml('https://tax.vacei.com/verify?token=abc123');
+    expect(html).toContain('Malta Tax AI');
+    expect(html).toContain('Activate my account');
+    // button href + fallback href + fallback visible text
+    expect(html.split('https://tax.vacei.com/verify?token=abc123').length).toBe(4);
+    expect(html).toContain('free returns');
+  });
+});

@@ -59,6 +59,46 @@ export function sessionUserId(token: string | undefined): string | null {
   return userId;
 }
 
+/**
+ * Branded HTML verification email (plain-text part remains the fallback).
+ * Table layout + inline styles only — email clients ignore <style> blocks.
+ * Palette/wording mirror the portal (#494fdf accent, #faf9f7 canvas).
+ */
+export function verifyEmailHtml(link: string): string {
+  return `<!doctype html>
+<html><body style="margin:0;padding:0;background:#faf9f7;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#14161a;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#faf9f7;padding:32px 16px;">
+<tr><td align="center">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+  <tr><td style="padding:0 8px 18px;">
+    <img src="${baseUrl()}/assets/vacei-logo.png" width="22" height="26" alt="VACEI" style="vertical-align:middle;border:0;">
+    <span style="font-size:18px;font-weight:600;letter-spacing:-0.02em;vertical-align:middle;">&nbsp;Malta Tax AI</span>
+  </td></tr>
+  <tr><td style="background:#ffffff;border:1px solid #e7e5e0;border-radius:14px;padding:36px 40px;">
+    <h1 style="margin:0 0 12px;font-size:24px;font-weight:600;letter-spacing:-0.02em;">Confirm your email</h1>
+    <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#3a3d40;">
+      Welcome to Malta Tax AI. Confirm your email address to activate your account
+      and your <strong>${FREE_CREDITS} free returns</strong> &mdash; no card required.
+    </p>
+    <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:10px;background:#494fdf;">
+      <a href="${link}" style="display:inline-block;padding:13px 28px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;">Activate my account</a>
+    </td></tr></table>
+    <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#8a857c;">
+      If the button doesn't work, paste this link into your browser:<br>
+      <a href="${link}" style="color:#494fdf;word-break:break-all;">${link}</a>
+    </p>
+  </td></tr>
+  <tr><td style="padding:18px 8px 0;font-size:12px;line-height:1.6;color:#8a857c;">
+    Upload the trial balance and the blank CfR template &mdash; the official template computes the tax.
+    No figure is produced by AI. EU/Malta hosting, never used to train AI.<br>
+    If you didn't create this account, you can safely ignore this email.
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body></html>`;
+}
+
 // ---- flows ----
 export interface SignupResult {
   ok: boolean;
@@ -90,7 +130,8 @@ export async function registerUser(emailRaw: string, password: string, firm: str
     await sendMail(
       email,
       'Confirm your Malta Tax AI account',
-      `Welcome to Malta Tax AI.\n\nConfirm your email to activate your account and your ${FREE_CREDITS} free returns:\n\n${link}\n\nIf you didn't request this, ignore this email.`
+      `Welcome to Malta Tax AI.\n\nConfirm your email to activate your account and your ${FREE_CREDITS} free returns:\n\n${link}\n\nIf you didn't request this, ignore this email.`,
+      verifyEmailHtml(link)
     );
   } catch {
     return { ok: false, error: 'Could not send the verification email — please try again.' };

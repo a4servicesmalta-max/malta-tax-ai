@@ -136,6 +136,7 @@ describe('template-aware mapping', () => {
     expect(res.body.verification).toEqual({
       accountsIncluded: 2,
       codeRowsWritten: 2,
+      staleValuesCleared: 0,
       allWritesVerified: true,
     });
   });

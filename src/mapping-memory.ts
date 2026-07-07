@@ -33,6 +33,27 @@ export interface MappingMemory {
   updatedAt: string;
 }
 
+/**
+ * Seed the mapping memory from the repo's committed corpus learnings when the
+ * data disk has none. In production DATA_DIR is the /data disk, so the 70KB of
+ * corpus-learned mappings shipped in the image at <cwd>/data/mappings.json was
+ * silently ignored — live uploads ran without the flywheel (found 2026-07-07:
+ * live CEE upload returned recalledFrom=null while the same commit locally
+ * recognised the client). Never overwrites learned production data.
+ */
+export function seedFromRepoIfEmpty(): void {
+  try {
+    if (fs.existsSync(FILE)) return;
+    const repoCopy = path.join(process.cwd(), 'data', 'mappings.json');
+    if (repoCopy === FILE || !fs.existsSync(repoCopy)) return;
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.copyFileSync(repoCopy, FILE);
+    console.info(`[mapping-memory] seeded ${load().length} corpus-learned mappings from ${repoCopy}`);
+  } catch (e) {
+    console.warn(`[mapping-memory] seed skipped: ${(e as Error).message}`);
+  }
+}
+
 function load(): MappingMemory[] {
   try {
     return JSON.parse(fs.readFileSync(FILE, 'utf8')) as MappingMemory[];
