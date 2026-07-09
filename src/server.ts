@@ -397,18 +397,22 @@ export function createApp() {
         }
         stage('prior reviewed/read');
 
-        const proposal = await proposeMappingAI(parsed.accounts, {
-          priorYearCodes: priorCodes,
-          priorYearValues: priorValues,
-          templateCodes,
-        });
-        stage(`mapping proposed (source=${proposal.source}, rules=${proposal.rules.length})`);
-        // FLYWHEEL RECALL: a returning client (recognised by ledger-code
-        // overlap) opens with the firm's own previously CONFIRMED mapping —
-        // it overrides model proposals for the accounts it knows. Template
-        // validity and statement routing still apply.
+        // FLYWHEEL RECALL: recognise a returning client by ledger-code overlap
+        // FIRST, so we can choose the mapping engine. A recognised client maps
+        // DETERMINISTICALLY — heuristic base (identical every run) with the
+        // firm's confirmed history layered on top — skipping the AI call, which
+        // is non-deterministic (same client, different sub-line placement run to
+        // run), slow (~2 min) and paid. AI variance now only touches genuinely
+        // new clients; the return a preparer sees for a known client is stable.
         const owner = currentUser(cookieToken(req))?.email ?? 'shared';
         const recalled = recallMapping(owner, parsed.accounts);
+        const proposal = await proposeMappingAI(
+          parsed.accounts,
+          { priorYearCodes: priorCodes, priorYearValues: priorValues, templateCodes },
+          { disableAi: !!recalled }
+        );
+        stage(`mapping proposed (source=${proposal.source}, rules=${proposal.rules.length}, recognised=${!!recalled})`);
+        // Template validity and statement routing still apply to recalled rules.
         let recalledFrom: string | null = null;
         if (recalled) {
           recalledFrom = recalled.clientName;

@@ -20,6 +20,15 @@ describe('ai-mapper', () => {
     }
   });
 
+  it('disableAi forces the deterministic heuristic path even when a model seam is present', async () => {
+    const fake = vi.fn().mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify({ rules: [{ ledgerCode: '1200', cfrCode: 9999, sheet: 'B_Sheet', confidence: 0.99 }] }) }],
+    });
+    const res = await proposeMappingAI(ETB, {}, { apiKey: 'test', createMessage: fake, disableAi: true });
+    expect(res.source).toBe('heuristic');
+    expect(fake).not.toHaveBeenCalled(); // the model must not be invoked
+  });
+
   it('parses a valid model response into proposed rules', async () => {
     const fake = vi.fn().mockResolvedValue({
       content: [

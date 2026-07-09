@@ -13,6 +13,13 @@ import { commonCodeKeys } from './code-usage';
 /** Max-first / API-key-fallback auth (see ai-auth), plus an optional model override. */
 export interface AiMapperOptions extends AiAuthOptions {
   model?: string;
+  /**
+   * Force the deterministic heuristic path, skipping the (non-deterministic,
+   * slow, paid) model call. The server sets this for RECOGNISED clients so a
+   * returning client maps identically every run from the firm's confirmed
+   * history — AI variance only affects genuinely new clients.
+   */
+  disableAi?: boolean;
 }
 
 export interface AiProposal {
@@ -142,7 +149,7 @@ export async function proposeMappingAI(
     rules: overlayFingerprints(proposeMapping(accounts, ctx).rules, accounts, ctx),
     source: 'heuristic',
   });
-  if (!isAiConfigured(opts)) return fallback();
+  if (opts.disableAi || !isAiConfigured(opts)) return fallback();
 
   try {
     // Chunked so the response size is bounded by CHUNK_SIZE, not client size.
