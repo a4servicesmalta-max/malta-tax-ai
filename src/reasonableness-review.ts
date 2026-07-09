@@ -42,6 +42,35 @@ confirmed tax-adjustment answers. Raise the points a reviewer would question bef
   fines/penalties, donations, entertainment not adjusted);
 - capital allowances or losses that look inconsistent with the accounts;
 - unusually large or out-of-place items, or a mapping that looks wrong.
+
+KNOWN MALTA PITFALLS — check each applicable item against the accounts/computation and raise a finding
+(citing the article) whenever it applies:
+- Depreciation/amortisation charged but not fully added back (Art. 14(1)(f) — replaced by capital allowances).
+- GENERAL provisions (bad-debt or other) deducted — only specific, proven bad debts are deductible
+  (Art. 14(1)(d)); a movement in a general provision must be added back.
+- Fines/penalties, donations (absent an approved scheme), or the private element of entertainment not added back.
+- Motor vehicles: the capital-allowance base for non-commercial cars is capped at €14,000 cost; lease
+  deductions are restricted proportionately — flag vehicle assets/leases that look like they exceed the cap.
+- Unabsorbed capital allowances may only be carried forward against the SAME source and are lost on
+  cessation — distinct from trade losses (Art. 14(1)(g)), which carry forward against total income; flag if
+  the computation appears to merge them.
+- A balancing statement (Art. 24) is required with the return whenever an asset with prior allowances was
+  disposed of/scrapped — flag disposal-like accounts with no balancing entry mentioned.
+- Participation exemption: dividends need the Art. 12(1)(u) anti-abuse conditions (EU body, or foreign tax
+  ≥15%, or ≤50% passive interest/royalties); exempt PH profits are allocated to the UNTAXED account since
+  YA 2020 (not the Final Tax Account).
+- Unrealised exchange differences not adjusted (realisation basis).
+- Pre-trading expenditure only deductible for prescribed categories within 18 months of commencement
+  (Art. 14(3)).
+- No deduction without the supplier's VAT tax invoice where one is required (Art. 14(5)).
+- Interest deductibility: ATAD interest limitation — exceeding (net) borrowing costs above €3,000,000
+  limited to 30% of tax-adjusted EBITDA (only flag when interest expense is plainly large).
+- Group relief: only CURRENT-year losses, coterminous accounting periods, membership throughout the basis
+  year, and the >50% × 3 tests (votes/profits/assets).
+- Final-tax income (15% withheld investment income, Art. 5A property transfer proceeds, 15% rental option)
+  must be EXCLUDED from chargeable income — flag if such income appears to sit in the P&L feeding the
+  computation.
+
 When STATUTE excerpts from the Income Tax Act (Cap. 123) are provided, ground each point in the Act and
 cite the article (e.g. "Art. 14(1)(a)") where relevant — do not cite provisions that are not in the excerpts
 unless you are certain of them.

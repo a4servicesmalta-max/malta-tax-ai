@@ -68,7 +68,12 @@ export function wearAndTearGuidance(accountNames: string[]): string[] {
   }
   const lines = [...seen.values()]
     .sort((a, b) => a.years - b.years)
-    .map((c) => `${c.category}: minimum ${c.years} years (${annualRate(c.years)}% p.a. straight-line).`);
+    .map((c) => {
+      const line = `${c.category}: minimum ${c.years} years (${annualRate(c.years)}% p.a. straight-line).`;
+      return c.category === 'Motor vehicles'
+        ? line + ' Non-commercial motor cars: allowance base capped at €14,000 cost; lease deductions restricted proportionately.'
+        : line;
+    });
   if (hasBuildings) {
     lines.push(
       'Industrial buildings & structures: max 2% per annum, plus a 10% initial allowance in the year of acquisition (industrial use only — offices/retail generally do not qualify).'

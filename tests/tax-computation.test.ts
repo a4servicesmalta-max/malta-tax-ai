@@ -44,6 +44,15 @@ describe('computeTax', () => {
     expect(c.taxCharge).toBe(14000);
   });
 
+  it('includes general provisions/impairments in the add-backs', () => {
+    const c = computeTax(20000, { generalProvisionsAddBack: 1500 });
+    expect(c.totalAddBacks).toBe(1500);
+    expect(c.addBacks).toEqual([
+      { id: 'generalProvisionsAddBack', label: expect.stringMatching(/general provisions/i), amount: 1500 },
+    ]);
+    expect(c.adjustedProfit).toBe(21500);
+  });
+
   it('rejects unknown ids and non-finite amounts — never a silent wrong figure', () => {
     expect(() => computeTax(0, { notAQuestion: 5 })).toThrow(/notAQuestion/);
     expect(() => computeTax(0, { depreciationAddBack: NaN })).toThrow(/invalid amount/i);

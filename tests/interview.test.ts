@@ -97,6 +97,27 @@ describe('interview', () => {
     expect(div!.preAnswer).toBe(10000);
   });
 
+  it('triggers generalProvisionsAddBack on a P&L provision/impairment movement line', () => {
+    const iv = buildInterview(
+      [{ accountCode: '8200', accountName: 'Provision for doubtful debts', cyBalance: 1500, pyBalance: null }],
+      { hasPriorReturn: false }
+    );
+    const gp = iv.questions.find((q) => q.id === 'generalProvisionsAddBack');
+    expect(gp).toBeDefined();
+    expect(gp!.preAnswer).toBe(1500);
+    expect(gp!.legalBasis).toMatch(/Cap\. 123 Art\. 14\(1\)\(d\)/);
+  });
+
+  it('does not trigger generalProvisionsAddBack on a balance-sheet cumulative provision', () => {
+    const iv = buildInterview(
+      [
+        { accountCode: '0032', accountName: 'Accumulated provision for depreciation', cyBalance: -12000, pyBalance: null },
+      ],
+      { hasPriorReturn: false }
+    );
+    expect(iv.questions.some((q) => q.id === 'generalProvisionsAddBack')).toBe(false);
+  });
+
   it('fillsFromAnswers rejects non-finite amounts and unknown ids, keeps 0-skip and negatives', () => {
     expect(() => fillsFromAnswers({ depreciationAddBack: NaN })).toThrow(
       /invalid amount for interview answer "depreciationAddBack"/i

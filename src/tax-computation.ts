@@ -18,6 +18,7 @@ const ADD_BACK_IDS = [
   'donationsAddBack',
   'entertainmentAddBack',
   'unrealizedFxAddBack',
+  'generalProvisionsAddBack',
 ] as const;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;

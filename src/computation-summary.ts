@@ -5,6 +5,7 @@
  */
 import type { InterviewFill } from './domain';
 import type { TaxComputation } from './tax-computation';
+import { filingDeadlineLines } from './filing-deadlines';
 
 export interface SummaryInput {
   clientName: string;
@@ -68,6 +69,9 @@ export function renderComputationSummary(input: SummaryInput): string {
   const warn = [...input.warnings, ...input.unmatchedCodes.map((u) => `Unmatched CfR code ${u.cfrCode} on ${u.sheet} — not written.`)]
     .map((w) => `<li>${esc(w)}</li>`)
     .join('\n');
+  const deadlines = filingDeadlineLines(input.yearOfAssessment)
+    .map((d) => `<li>${esc(d)}</li>`)
+    .join('\n');
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>Tax computation — ${esc(input.clientName)}</title>
 <style>body{font-family:Segoe UI,Arial,sans-serif;margin:2rem;color:#111}
@@ -82,6 +86,7 @@ table{border-collapse:collapse;width:100%;margin:1rem 0}td,th{border:1px solid #
 the CfR return template computes the tax. This document shows the workings and provenance.</p>
 <h2>Tax computation</h2>
 ${renderComputationTable(input.computation)}
+${deadlines ? `<h2>Filing deadlines (Year of Assessment ${esc(input.yearOfAssessment)})</h2><ul>${deadlines}</ul>` : ''}
 <h2>Tax adjustments (confirmed in interview)</h2>
 <table><tr><th>Adjustment</th><th>Amount €</th><th>Treatment</th></tr>${adj || '<tr><td colspan="3">None</td></tr>'}</table>
 <h2>Account mapping (provenance)</h2>

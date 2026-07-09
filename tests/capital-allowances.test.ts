@@ -37,4 +37,9 @@ describe('capital allowances (Malta wear-and-tear rates)', () => {
     const g = wearAndTearGuidance(['Industrial building at cost']);
     expect(g.some((l) => l.includes('2% per annum') && l.includes('10% initial'))).toBe(true);
   });
+
+  it('caps the motor vehicles line at €14,000 for non-commercial cars', () => {
+    const g = wearAndTearGuidance(['Motor vehicles at cost']);
+    expect(g.some((l) => l.includes('Motor vehicles') && l.includes('€14,000'))).toBe(true);
+  });
 });

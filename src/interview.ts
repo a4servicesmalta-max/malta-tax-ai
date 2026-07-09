@@ -29,6 +29,8 @@ interface Trigger {
   nameRe: RegExp;
   /** Extra per-trigger exclusion (on top of the global balance-sheet exclusion). */
   excludeRe?: RegExp;
+  /** Bypass GLOBAL_EXCLUDE_RE for this trigger (it supplies its own balance-sheet exclusion via excludeRe). */
+  skipGlobalExclude?: boolean;
   text: string;
   legalBasis: string;
   /**
@@ -87,8 +89,22 @@ const TRIGGERS: Trigger[] = [
     nameRe: /dividend/i,
     excludeRe: /payable|proposed|declared/i,
     text: 'Dividend income may qualify for the participation exemption. Confirm the exempt amount (0 if not applicable).',
-    legalBasis: 'Cap. 123 Art. 12(1)(u) — participation exemption for qualifying holdings.',
+    legalBasis:
+      'Cap. 123 Art. 12(1)(u) — participation exemption for qualifying holdings. Dividends also need an anti-abuse condition: EU-resident/incorporated body, or foreign tax ≥15%, or ≤50% passive interest/royalties. Exempt amounts are allocated to the Untaxed Account (since YA 2020).',
     expectedSign: 'cr',
+  },
+  {
+    id: 'generalProvisionsAddBack',
+    nameRe: /provision|impairment|expected credit loss|\becl\b/i,
+    // Own balance-sheet exclusion (this trigger bypasses GLOBAL_EXCLUDE_RE, which
+    // would otherwise blanket-exclude every "provision" hit, including the P&L
+    // movement lines this trigger exists to catch).
+    excludeRe: /deprecia|accumulat/i,
+    skipGlobalExclude: true,
+    text: 'Movements in general provisions (bad debts, impairments, ECL) are not deductible — only specific, proven bad debts qualify. Confirm the add-back amount.',
+    legalBasis:
+      'Cap. 123 Art. 14(1)(d) — bad debts deductible only when proved to have become bad in the basis year; general/collective provisions are not.',
+    expectedSign: 'dr',
   },
 ];
 
@@ -106,7 +122,7 @@ export function buildInterview(etb: EtbAccount[], ctx: InterviewContext): Interv
     const hits = etb.filter(
       (a) =>
         t.nameRe.test(a.accountName) &&
-        !GLOBAL_EXCLUDE_RE.test(a.accountName) &&
+        (t.skipGlobalExclude || !GLOBAL_EXCLUDE_RE.test(a.accountName)) &&
         !(t.excludeRe && t.excludeRe.test(a.accountName))
     );
     if (hits.length === 0) continue;
@@ -162,6 +178,7 @@ export const LABELS: Record<string, string> = {
   entertainmentAddBack: 'Add back: entertainment',
   unrealizedFxAddBack: 'Adjust: unrealised exchange differences',
   dividendsExemptPE: 'Exempt: participation exemption dividends',
+  generalProvisionsAddBack: 'Add back: general provisions/impairments',
   lossesBroughtForward: 'Deduct: losses brought forward',
   capitalAllowancesTotal: 'Deduct: capital allowances',
   unabsorbedCapitalAllowancesBf: 'Deduct: unabsorbed capital allowances b/f',

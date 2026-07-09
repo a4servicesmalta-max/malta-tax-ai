@@ -67,6 +67,18 @@ describe('reasonablenessReview', () => {
     expect(r.note).toMatch(/service error/i);
   });
 
+  it('primes the model with the known Malta pitfalls checklist (e.g. the €14,000 vehicle cap)', async () => {
+    let capturedSystem = '';
+    await reasonablenessReview(ETB, COMP, {
+      apiKey: 'test',
+      createMessage: async (params) => {
+        capturedSystem = String(params.system ?? '');
+        return { content: [{ type: 'text', text: JSON.stringify({ findings: [] }) }] };
+      },
+    });
+    expect(capturedSystem).toContain('€14,000');
+  });
+
   it('never produces a figure — the model only returns prose findings', async () => {
     // Even if the model tries to smuggle an amount, findings carry only text.
     const r = await reasonablenessReview(ETB, COMP, {
