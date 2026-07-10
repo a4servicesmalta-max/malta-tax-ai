@@ -33,5 +33,9 @@ export const ANCHORS: Record<string, DirectAnchor | null> = {
   donationsAddBack: { sheet: 'p3', ref: 'E41', labelRef: 'B41' }, // field 16a (other add-backs, specify)
   entertainmentAddBack: { sheet: 'p3', ref: 'E42', labelRef: 'B42' }, // field 17a (other add-backs, specify)
   unrealizedFxAddBack: { sheet: 'p3', ref: 'E20', labelRef: 'B20' }, // field 7a (unrealised losses, specify)
+  // Field 12a (first "Expenditure disallowed for tax purposes [Please specify]"
+  // row) — where the firm books judgment add-backs (e.g. "Disallowed
+  // Administrative Expenses - Company did not trade", Northwind YA2024).
+  otherDisallowedAddBack: { sheet: 'p3', ref: 'E31', labelRef: 'B31' },
   dividendsExemptPE: null, // field 31a is a formula from the TRA8 schedule — enter on TRA8
 };

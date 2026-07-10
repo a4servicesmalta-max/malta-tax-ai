@@ -60,8 +60,14 @@ export function loadStoredBlank(version: string): Buffer | null {
   }
 }
 
-/** Refs each sheet's own IF(<ref>="",re,…) markers declare mandatory. */
-export async function requiredCellRefs(buffer: Buffer): Promise<{ required: Set<string>; sheets: Set<string> }> {
+/**
+ * Refs each sheet's own required-input markers declare:
+ *  - `re`  ("Required!")            → required
+ *  - `reo` ("Required or insert 0!") → requiredOrZero (the firm types 0)
+ */
+export async function requiredCellRefs(
+  buffer: Buffer
+): Promise<{ required: Set<string>; requiredOrZero: Set<string>; sheets: Set<string> }> {
   const zip = await JSZip.loadAsync(buffer);
   const wbXml = await zip.file('xl/workbook.xml')!.async('string');
   const relsXml = await zip.file('xl/_rels/workbook.xml.rels')!.async('string');
@@ -72,6 +78,7 @@ export async function requiredCellRefs(buffer: Buffer): Promise<{ required: Set<
     if (id && t) relTarget[id] = t;
   }
   const required = new Set<string>();
+  const requiredOrZero = new Set<string>();
   const sheets = new Set<string>();
   for (const m of wbXml.matchAll(/<sheet\b[^>]*\/>/g)) {
     const name = m[0].match(/\bname="([^"]*)"/)?.[1];
@@ -83,10 +90,10 @@ export async function requiredCellRefs(buffer: Buffer): Promise<{ required: Set<
     if (!file) continue;
     const xml = await file.async('string');
     for (const fm of xml.matchAll(/<f[^>]*>([^<]*)<\/f>/g))
-      for (const rm of fm[1].matchAll(/IF\(\s*\$?([A-Z]{1,2})\$?(\d+)\s*=\s*(?:""|&quot;&quot;)\s*,\s*re\s*[,)]/g))
-        required.add(`${name}!${rm[1]}${rm[2]}`);
+      for (const rm of fm[1].matchAll(/IF\(\s*\$?([A-Z]{1,2})\$?(\d+)\s*=\s*(?:""|&quot;&quot;)\s*,\s*(re|reo)\s*[,)]/g))
+        (rm[3] === 'reo' ? requiredOrZero : required).add(`${name}!${rm[1]}${rm[2]}`);
   }
-  return { required, sheets };
+  return { required, requiredOrZero, sheets };
 }
 
 /** One standing declaration: where it goes and what the preparer is told. */
@@ -160,7 +167,10 @@ export function declarationCells(input: DeclarationInput): { cells: CfrDirectCel
     add('p1', 'AG8', /^\d+$/.test(tin) ? Number(tin) : tin, `p1: taxpayer reference ${tin}`, true);
   }
   if (input.companyName) {
-    add('p1', 'L10', input.companyName.trim().toUpperCase(), `p1: company name ${input.companyName.trim().toUpperCase()}`, true);
+    const nm = input.companyName.trim().toUpperCase();
+    add('p1', 'L10', nm, `p1: company name ${nm}`, true);
+    // Income statement header carries the name as a typed input too (E6).
+    add('Income', 'E6', nm, 'Income: company name header', true);
   }
 
   for (const d of STANDING) add(d.sheet, d.ref, d.value, d.note);
@@ -196,6 +206,86 @@ export function declarationCells(input: DeclarationInput): { cells: CfrDirectCel
     }
   }
 
+  return { cells, notes };
+}
+
+/**
+ * Registration data typed on the prior filed return that carries over to the
+ * new one: p1 company details (MBR number, principal activity, registered
+ * address), the p7 shareholder register + shareholder addresses, and the p8
+ * declaration signatory / legal representative. Refs verified identical
+ * across YA2023/YA2024/YA2025 vintages on real filings. Deliberately NOT
+ * lifted: dates, dividend/account-balance figure columns (year-specific).
+ */
+const LIFT_REGIONS: Array<{ sheet: string; rows: [number, number]; cols: string[]; upper?: boolean; note: string }> = [
+  { sheet: 'p1', rows: [44, 60], cols: ['N'], note: 'p1 company details (MBR no., activity, registered address)' },
+  { sheet: 'Income', rows: [8, 8], cols: ['E'], note: 'Income: principal activity description' },
+  { sheet: 'p7', rows: [8, 92], cols: ['B', 'D', 'F', 'I', 'M', 'O'], upper: true, note: 'p7 shareholder register' },
+  { sheet: 'p7', rows: [93, 130], cols: ['B', 'K', 'N', 'Q'], upper: true, note: 'p7 shareholder addresses' },
+  { sheet: 'p8', rows: [37, 37], cols: ['A'], upper: true, note: 'p8 declaration signatory' },
+  { sheet: 'p8', rows: [43, 45], cols: ['A'], upper: true, note: 'p8 legal representative' },
+];
+
+export async function liftRegistrationFromPrior(
+  priorBuffer: Buffer,
+  targetSheets: Set<string>
+): Promise<{ cells: CfrDirectCell[]; notes: string[] }> {
+  const cells: CfrDirectCell[] = [];
+  const noted = new Set<string>();
+  const notes: string[] = [];
+  try {
+    const zip = await JSZip.loadAsync(priorBuffer);
+    const wbXml = await zip.file('xl/workbook.xml')!.async('string');
+    const relsXml = await zip.file('xl/_rels/workbook.xml.rels')!.async('string');
+    const sstXml = (await zip.file('xl/sharedStrings.xml')?.async('string')) ?? '';
+    const sst = [...sstXml.matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) =>
+      [...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((t) => t[1]).join('')
+    );
+    const relTarget: Record<string, string> = {};
+    for (const m of relsXml.matchAll(/<Relationship\b[^>]*>/g)) {
+      const id = m[0].match(/\bId="([^"]*)"/)?.[1];
+      const t = m[0].match(/\bTarget="([^"]*)"/)?.[1];
+      if (id && t) relTarget[id] = t;
+    }
+    for (const region of LIFT_REGIONS) {
+      if (!targetSheets.has(region.sheet)) continue;
+      const rid = wbXml.match(new RegExp(`<sheet name="${region.sheet}"[^>]*r:id="(rId\\d+)"`))?.[1];
+      const target = rid && relTarget[rid];
+      if (!target) continue;
+      const xml = await zip.file('xl/' + target.replace(/^\//, '').replace(/^xl\//, ''))!.async('string');
+      for (const cm of xml.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+        const attrs = cm[1] ?? '';
+        const body = cm[2] ?? '';
+        if (/<f[\s>]/.test(body)) continue; // formulas are template machinery
+        const ref = attrs.match(/\br="([^"]+)"/)?.[1];
+        if (!ref) continue;
+        const col = ref.match(/^[A-Z]+/)![0];
+        const row = parseInt(ref.match(/\d+$/)![0], 10);
+        if (!region.cols.includes(col) || row < region.rows[0] || row > region.rows[1]) continue;
+        const t = attrs.match(/\bt="([^"]*)"/)?.[1] ?? 'n';
+        let v =
+          body.match(/<v>([\s\S]*?)<\/v>/)?.[1] ?? body.match(/<is>[\s\S]*?<t[^>]*>([\s\S]*?)<\/t>/)?.[1] ?? '';
+        if (v === '') continue;
+        if (t === 's') v = sst[parseInt(v, 10)] ?? v;
+        const s = String(v).trim();
+        if (s === '' || /ref to page/i.test(s)) continue; // placeholder junk
+        const isNum = t === 'n' || (t !== 's' && /^-?\d+(\.\d+)?$/.test(s));
+        cells.push({ sheet: region.sheet, ref, value: isNum ? Number(s) : region.upper ? s.toUpperCase() : s });
+        if (!noted.has(region.note)) {
+          noted.add(region.note);
+          notes.push(`Carried over from the prior return: ${region.note} — review for changes`);
+        }
+      }
+    }
+  } catch {
+    /* best-effort — a malformed prior return never blocks generation */
+  }
+  // The Income sheet's activity header (E8) mirrors p1's principal activity —
+  // older filings leave E8 as a placeholder, so derive it from N50 when absent.
+  if (targetSheets.has('Income') && !cells.some((c) => c.sheet === 'Income' && c.ref === 'E8')) {
+    const activity = cells.find((c) => c.sheet === 'p1' && c.ref === 'N50')?.value;
+    if (typeof activity === 'string') cells.push({ sheet: 'Income', ref: 'E8', value: activity });
+  }
   return { cells, notes };
 }
 

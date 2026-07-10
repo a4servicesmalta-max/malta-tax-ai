@@ -53,6 +53,7 @@ import {
   declarationCells,
   interestExpenseTotal,
   readCompanyIdentity,
+  liftRegistrationFromPrior,
 } from './firm-defaults';
 
 interface Session {
@@ -703,7 +704,7 @@ export function createApp() {
       // Deterministic writes, each listed for the preparer; constrained to
       // the refs THIS template's own "Required!" markers declare mandatory.
       const included = session.accounts.filter((a) => !(excluded ?? []).includes(a.accountCode));
-      const { required, sheets } = await requiredCellRefs(session.template);
+      const { required, requiredOrZero, sheets } = await requiredCellRefs(session.template);
       const decl = declarationCells({
         required,
         sheets,
@@ -717,6 +718,14 @@ export function createApp() {
         decl.notes.push(
           'No taxpayer reference (TIN) was provided — p1 was left without it. Enter the income tax number before submitting.'
         );
+      }
+      // Registration data carried over from the prior filing (p1 details,
+      // p7 shareholder register, p8 signatory) — a shareholder change is
+      // declared via the p2 G91–G94 questions, not silently re-derived.
+      if (session.priorBuffer) {
+        const lifted = await liftRegistrationFromPrior(session.priorBuffer, sheets);
+        directCells.push(...lifted.cells);
+        decl.notes.push(...lifted.notes);
       }
       const writtenAnchorRefs = new Set<string>();
       for (const f of interviewFills) {
@@ -765,11 +774,13 @@ export function createApp() {
             `(€${comp.adjustedProfit.toFixed(2)}) available to split across tax accounts on p3 row 99 — reduce the allocation.`,
         });
       }
-      const mta = Math.round((comp.adjustedProfit - ipa - fia) * 100) / 100;
+      // A loss year allocates nothing to the taxed accounts (filed returns
+      // carry 0/0/0 on row 99 — Northwind YA2024); only a profit is split.
+      const mta = comp.adjustedProfit > 0 ? Math.round((comp.adjustedProfit - ipa - fia) * 100) / 100 : 0;
       directCells.push(
-        { sheet: 'p3', ref: 'E99', value: ipa },
+        { sheet: 'p3', ref: 'E99', value: comp.adjustedProfit > 0 ? ipa : 0 },
         { sheet: 'p3', ref: 'G99', value: mta },
-        { sheet: 'p3', ref: 'I99', value: fia }
+        { sheet: 'p3', ref: 'I99', value: comp.adjustedProfit > 0 ? fia : 0 }
       );
       // Section totals (TOTAL REVENUE/ASSETS/…) are typed inputs on the firm's
       // returns — derive them arithmetically, but ONLY for rows this template
@@ -804,6 +815,58 @@ export function createApp() {
         ...deriveSectionTotals(closedCells, writableTotals),
       ].filter((c) => writableInputKeys.has(`${c.sheet}:${c.cfrCode}`));
       const allCells = [...core, ...derived];
+
+      // p6 reserves reconciliation ("Distributable profits" row): b/f and
+      // year's movement as typed inputs; the sheet's own formulas roll the
+      // c/f, tax-account rows and TOTAL RESERVES from these. Signs flip vs
+      // the ETB (Dr accumulated losses → negative distributable profits).
+      const re7501 = closedCells.find((c) => c.sheet === 'Income' && c.cfrCode === 7501)?.amount;
+      const re7600 = closedCells.find((c) => c.sheet === 'Income' && c.cfrCode === 7600)?.amount;
+      if (sheets.has('p6') && re7501 !== undefined && re7600 !== undefined) {
+        directCells.push(
+          { sheet: 'p6', ref: 'O32', value: -re7501 },
+          { sheet: 'p6', ref: 'Q32', value: -(re7600 - re7501) }
+        );
+        decl.notes.push('p6: distributable profits brought forward + current-year movement (ties TOTAL RESERVES to the balance sheet)');
+      }
+      // p4 field 70b — unabsorbed trading losses carried forward (filed
+      // returns carry it negative, like the 66b brought-forward row) — plus
+      // the 66-row IPA/FIA side columns, 0 under the standard MTA-only
+      // profile (see the lossesBroughtForward anchor note).
+      if (sheets.has('p4')) {
+        directCells.push(
+          { sheet: 'p4', ref: 'O62', value: -Math.abs(comp.lossesCarriedForward ?? 0) },
+          { sheet: 'p4', ref: 'K52', value: 0 },
+          { sheet: 'p4', ref: 'R52', value: 0 }
+        );
+      }
+      // NIL-YEAR ZERO BATTERY: the CfR e-return marks dozens of cells
+      // "Required or insert 0!" (`reo` markers); on a nil year the firm types
+      // 0 into every one (verified: Northwind YA2024). B_Sheet/Income are
+      // excluded — their value column doubles as account code rows, and a
+      // blind 0 could overwrite a mapped figure.
+      const isNilYear = comp.taxCharge === 0 && comp.chargeableIncome <= 0 && ipa === 0 && fia === 0;
+      const targeted = new Set(directCells.map((d) => `${d.sheet}!${d.ref}`));
+      const zeroable = [...requiredOrZero].filter(
+        (k) => !k.startsWith('B_Sheet!') && !k.startsWith('Income!') && !targeted.has(k)
+      );
+      if (isNilYear) {
+        for (const k of zeroable) {
+          const [sh, ref] = k.split('!');
+          directCells.push({ sheet: sh, ref, value: 0 });
+        }
+        // p4 capital-allowance row 18 columns — typed 0 on nil-year filings
+        // (not reo-marked on the sheet, so the battery misses them).
+        if (sheets.has('p4')) {
+          for (const ref of ['K18', 'O18', 'R18']) directCells.push({ sheet: 'p4', ref, value: 0 });
+        }
+        if (zeroable.length) decl.notes.push(`Nil year: 0 written into ${zeroable.length} "Required or insert 0!" cells across the return`);
+      } else if (zeroable.length) {
+        decl.notes.push(
+          `${zeroable.length} "Required or insert 0!" cells were left for you (taxable year — several carry real figures): ` +
+            zeroable.slice(0, 12).join(', ') + (zeroable.length > 12 ? ', …' : '')
+        );
+      }
       // STALE RESIDUE: typed values on input rows we are NOT writing (a
       // non-blank "template" — e.g. a prior-year filed return re-used as the
       // upload) would survive into the produced workbook and double-count
@@ -815,7 +878,14 @@ export function createApp() {
       if (staleRows.length) {
         console.info(`[generate] non-blank template: clearing ${staleRows.length} stale typed value(s)`);
       }
-      const { buffer, unmatched } = await fillCfrReturn(session.template, allCells, directCells, staleRows);
+      const { buffer, unmatched, failedDirect } = await fillCfrReturn(session.template, allCells, directCells, staleRows);
+      // A zero-battery cell whose row isn't serialized is harmless (nothing
+      // to zero); any OTHER direct write failing deserves a loud warning.
+      const zeroableSet = new Set(zeroable);
+      const importantFailures = failedDirect.filter((f) => !zeroableSet.has(`${f.sheet}!${f.ref}`));
+      for (const f of importantFailures) {
+        session.warnings.push(`Could not write ${f.sheet}!${f.ref} (${f.error}) — enter it on the return manually.`);
+      }
       // A CORE mapped figure with no row on the template is a real error (rules
       // were validated, so this should never happen). An unmatched DERIVED cell
       // is harmless — the template computes that total itself — so ignore it.

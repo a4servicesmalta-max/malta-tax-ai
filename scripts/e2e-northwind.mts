@@ -108,6 +108,7 @@ async function cellValues(buffer: Buffer, wanted: Array<[string, string]>): Prom
     avgEmployees: 0,
     auditReportQualified: 0,
     atadStandaloneEntity: 0,
+    otherDisallowedAddBack: 31331, // team's judgment: company did not trade
   };
   for (const q of sess.interview.questions) {
     if (!(q.id in answers)) answers[q.id] = q.preAnswer ?? 0;

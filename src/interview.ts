@@ -281,6 +281,18 @@ export function buildInterview(etb: EtbAccount[], ctx: InterviewContext): Interv
     // See nidReferenceRate above — same reasoning.
     required: false,
   });
+  // Judgment add-back the firm books on most returns (non-trading companies,
+  // private-element expenses, etc.) — always asked, never inferred.
+  questions.push({
+    id: 'otherDisallowedAddBack',
+    text: 'Other expenditure disallowed for tax purposes not captured above (e.g. expenses of a company that did not trade, private-element costs). Confirm 0 if none.',
+    legalBasis:
+      'Cap. 123 Art. 14(1) — deductions are limited to outgoings wholly and exclusively incurred in the production of the income; Art. 26 disallows expenses not so incurred.',
+    kind: 'amount',
+    preAnswer: null,
+    triggeredBy: [],
+    required: true,
+  });
   // p2 statutory questionnaire answers written onto the return itself (see
   // firm-defaults.ts declarationCells) — the CfR e-return marks them Required.
   const payrollHits = etb.filter((a) => /wage|salar|payroll|remunerat/i.test(a.accountName));
@@ -324,6 +336,7 @@ export const LABELS: Record<string, string> = {
   unrealizedFxAddBack: 'Adjust: unrealised exchange differences',
   dividendsExemptPE: 'Exempt: participation exemption dividends',
   generalProvisionsAddBack: 'Add back: general provisions/impairments',
+  otherDisallowedAddBack: 'Add back: other disallowed expenditure',
   lossesBroughtForward: 'Deduct: losses brought forward',
   capitalAllowancesTotal: 'Deduct: capital allowances',
   unabsorbedCapitalAllowancesBf: 'Deduct: unabsorbed capital allowances b/f',

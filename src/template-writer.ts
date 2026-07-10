@@ -38,6 +38,8 @@ export interface FillResult {
   buffer: Buffer;
   /** Codes that had no matching row (surfaced for review, never silently dropped). */
   unmatched: Array<{ sheet: string; cfrCode: number }>;
+  /** Direct-cell writes that could not land (e.g. the target row is not serialized in the sheet XML). */
+  failedDirect: Array<{ sheet: string; ref: string; error: string }>;
 }
 
 const WORKBOOK = 'xl/workbook.xml';
@@ -201,6 +203,7 @@ export async function fillCfrReturn(
   for (const d of directCells) add(d.sheet, { ref: d.ref, value: d.value });
 
   const unmatched: FillResult['unmatched'] = [];
+  const failedDirect: FillResult['failedDirect'] = [];
   for (const [sheet, writes] of bySheet) {
     const path = pathMap[sheet];
     if (!path) throw new Error(`Sheet "${sheet}" not found in template`);
@@ -210,6 +213,7 @@ export async function fillCfrReturn(
     const p = detectPrefix(xml);
     for (const w of writes) {
       let ref = w.ref;
+      const isDirect = !!w.ref;
       if (!ref && w.code != null) {
         const row = rowOfCode(xml, w.code, p);
         if (row == null) {
@@ -220,12 +224,19 @@ export async function fillCfrReturn(
         ref = `${VALUE_COL}${row}`;
       }
       if (!ref) continue;
-      xml = w.clear ? clearCell(xml, ref, p) : setCell(xml, ref, w.value, p);
+      try {
+        xml = w.clear ? clearCell(xml, ref, p) : setCell(xml, ref, w.value, p);
+      } catch (e) {
+        // Never fail the whole return for one direct cell (a "row not present"
+        // target) — surface it so the caller decides what is fatal.
+        if (!isDirect) throw e;
+        failedDirect.push({ sheet, ref, error: (e as Error).message });
+      }
     }
     zip.file(path, xml);
   }
   zip.file(WORKBOOK, setFullCalcOnLoad(wbXml));
 
   const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
-  return { buffer, unmatched };
+  return { buffer, unmatched, failedDirect };
 }
