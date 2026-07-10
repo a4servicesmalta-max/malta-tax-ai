@@ -727,6 +727,18 @@ export function createApp() {
         directCells.push(...lifted.cells);
         decl.notes.push(...lifted.notes);
       }
+      // p8 declaration date — the FS board-approval date when financial
+      // statements were uploaded (Excel serial; the cell's date style is
+      // preserved by the writer). The preparer adjusts it if the return is
+      // signed on a different day.
+      if (sheets.has('p8') && session.fsFigures?.approvalDate) {
+        const [y, mo, d] = session.fsFigures.approvalDate.split('-').map(Number);
+        const serial = Math.round((Date.UTC(y, mo - 1, d) - Date.UTC(1899, 11, 30)) / 86400000);
+        directCells.push({ sheet: 'p8', ref: 'U37', value: serial });
+        decl.notes.push(
+          `p8: declaration date ${String(d).padStart(2, '0')}/${String(mo).padStart(2, '0')}/${y} — taken from the financial statements' board-approval date; change it if the return is signed on a different day`
+        );
+      }
       const writtenAnchorRefs = new Set<string>();
       for (const f of interviewFills) {
         if (f.anchorId && ANCHORS[f.anchorId]) {

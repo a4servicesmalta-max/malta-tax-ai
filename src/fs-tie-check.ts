@@ -20,6 +20,41 @@ export interface FsFigures {
   revenue?: number | null;
   totalEquity?: number | null;
   totalLiabilities?: number | null;
+  /** Date the FS were approved/signed by the board (ISO yyyy-mm-dd) — feeds the p8 declaration date. */
+  approvalDate?: string | null;
+}
+
+const MONTHS: Record<string, number> = {
+  january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
+  july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+};
+
+/**
+ * The board-approval date from the FS text: "approved and authorised for
+ * issue by the board of directors on 27th October 2025 and were signed by".
+ * PDF extraction can space the ordinal ("27 th"), so the suffix is optional
+ * and detached. Numeric dd/mm/yyyy near the approval phrase also accepted.
+ */
+export function extractApprovalDate(text: string): string | null {
+  const flat = text.replace(/\s+/g, ' ');
+  const scopes = [...flat.matchAll(/(?:approved|authorised for issue|signed)[^.]{0,120}/gi)].map((m) => m[0]);
+  for (const scope of scopes) {
+    const worded = scope.match(
+      /\b(\d{1,2})\s*(?:st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)[ ,]+(\d{4})\b/i
+    );
+    if (worded) {
+      const [, d, mon, y] = worded;
+      const day = parseInt(d, 10), month = MONTHS[mon.toLowerCase()], year = parseInt(y, 10);
+      if (day >= 1 && day <= 31) return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+    const numeric = scope.match(/\b(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})\b/);
+    if (numeric) {
+      const day = parseInt(numeric[1], 10), month = parseInt(numeric[2], 10), year = parseInt(numeric[3], 10);
+      if (day >= 1 && day <= 31 && month >= 1 && month <= 12)
+        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+  }
+  return null;
 }
 
 // Anchored to the whole trimmed label so note text ("the net profit margin")
@@ -31,14 +66,15 @@ const NET_PROFIT_RE =
 const TOTAL_ASSETS_RE = /^total assets$/i;
 
 /** All tie-able FS lines. "total equity(?! and)" keeps "Total equity and liabilities" out. */
-const FIGURE_LABELS: Record<keyof FsFigures, RegExp> = {
+type FigureKey = Exclude<keyof FsFigures, 'approvalDate'>;
+const FIGURE_LABELS: Record<FigureKey, RegExp> = {
   netProfit: NET_PROFIT_RE,
   totalAssets: TOTAL_ASSETS_RE,
   revenue: /^(?:total )?(?:revenue|turnover)$/i,
   totalEquity: /^total (?:equity(?! and)|shareholders?'? (?:funds|equity))$/i,
   totalLiabilities: /^total liabilities$/i,
 };
-const FIGURE_KEYS = Object.keys(FIGURE_LABELS) as Array<keyof FsFigures>;
+const FIGURE_KEYS = Object.keys(FIGURE_LABELS) as Array<FigureKey>;
 const emptyFigures = (): FsFigures => ({
   netProfit: null,
   totalAssets: null,
@@ -170,6 +206,7 @@ export async function extractFsFiguresAny(
     if (ext === 'pdf') {
       const { text } = await pdfParse(buffer);
       figures = extractFiguresFromText(text || '');
+      figures.approvalDate = extractApprovalDate(text || '');
     } else if (ext === 'docx' || ext === 'doc') {
       // DOCX is a zip; pull the main document XML and strip tags. (.doc binary
       // isn't parseable this way — the catch below reports it plainly.)
@@ -183,9 +220,18 @@ export async function extractFsFiguresAny(
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>');
       figures = extractFiguresFromText(text);
+      figures.approvalDate = extractApprovalDate(text);
     } else {
       // Excel / CSV / plain text — SheetJS parses all of these from a buffer.
       figures = extractFsFigures(buffer);
+      const wb = XLSX.read(buffer, { type: 'buffer' });
+      const textBlob = wb.SheetNames.map((n) =>
+        XLSX.utils
+          .sheet_to_json<unknown[]>(wb.Sheets[n], { header: 1, raw: false, defval: '' })
+          .map((r) => r.join(' '))
+          .join('\n')
+      ).join('\n');
+      figures.approvalDate = extractApprovalDate(textBlob);
     }
     const note =
       figures.netProfit === null && figures.totalAssets === null

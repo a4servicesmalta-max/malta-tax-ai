@@ -66,12 +66,14 @@ async function cellValues(buffer: Buffer, wanted: Array<[string, string]>): Prom
     .post('/api/session')
     .attach('etb', ETB)
     .attach('template', TEMPLATE_UPLOAD)
+    .attach('fs', path.join(DIR, 'Northwind_FS_2023.pdf'))
     .attach('prior', PRIOR);
   if (s.status !== 200) throw new Error(`session failed: ${s.status} ${JSON.stringify(s.body).slice(0, 400)}`);
   const sess = s.body;
   console.log('   templateVersion:', sess.templateVersion);
   console.log('   swap warning:', sess.warnings.find((w: string) => /verified blank/i.test(w)) ?? '(NONE — BUG)');
   console.log('   priorIdentity:', JSON.stringify(sess.priorIdentity));
+  console.log('   fs approvalDate:', sess.fsFigures && sess.fsFigures.approvalDate);
   console.log('   proposal source:', sess.proposal.source, 'rules:', sess.proposal.rules.length, 'accounts:', sess.accounts.length);
 
   // Force the TEAM's exact code picks (read off their filed YA2024) so the
