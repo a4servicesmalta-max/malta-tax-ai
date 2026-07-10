@@ -602,15 +602,47 @@ export function createApp() {
         });
       }
       const netProfit = netProfitFromMapping(fill);
+      const comp = computeTax(netProfit, answers ?? {});
       const interviewFills = fillsFromAnswers(answers ?? {});
       const directCells = [...fill.directCells];
+      const writtenAnchorRefs = new Set<string>();
       for (const f of interviewFills) {
         if (f.anchorId && ANCHORS[f.anchorId]) {
           const a = ANCHORS[f.anchorId]!;
           directCells.push({ sheet: a.sheet, ref: a.ref, value: a.negate ? -Math.abs(f.amount) : f.amount });
+          writtenAnchorRefs.add(`${a.sheet}:${a.ref}`);
           if (a.labelRef) directCells.push({ sheet: a.sheet, ref: a.labelRef, value: f.label });
         }
       }
+      // A zero/unconfirmed answer is dropped by fillsFromAnswers (never writes a
+      // deliberate 0), so an anchor cell it would otherwise touch is left as-is —
+      // fine on a genuinely blank template, but a REUSED prior-period file (a
+      // real firm workflow: last year's filed return re-purposed as this year's
+      // starting point) would leave that cell's stale prior-year figure sitting
+      // untouched and silently wrong. Explicitly zero every other anchor cell.
+      for (const [id, a] of Object.entries(ANCHORS)) {
+        if (!a || id === 'netProfitPerAccounts') continue; // netProfitPerAccounts is always written above, unconditionally
+        const key = `${a.sheet}:${a.ref}`;
+        if (writtenAnchorRefs.has(key)) continue;
+        directCells.push({ sheet: a.sheet, ref: a.ref, value: 0 });
+      }
+      // p3 fields 37a/37b/37c ("Allocated to Taxed Account": Immovable Property /
+      // Maltese Taxed / Foreign Income) are a MANUAL entry the template never
+      // computes itself (verified against real filed returns — E99/G99/I99 carry
+      // literal values, not formulas), yet everything downstream (p4, p5, the
+      // TRA61/62/63 tax-account totals) is fed from this row. Leaving it
+      // unwritten means either a blank cross-check failure (CfR's own T100 check)
+      // on a fresh template, or a stale figure surviving on a reused one — in
+      // both cases the wrong number silently reaches the tax computation.
+      // ponytail: standard local trading company assumed — the whole adjusted
+      // profit lands in the Maltese Taxed Account (G99); split across IPA (E99)
+      // /FIA (I99) when a non-MTA profile (foreign-source or property income) is
+      // supported.
+      directCells.push(
+        { sheet: 'p3', ref: 'E99', value: 0 },
+        { sheet: 'p3', ref: 'G99', value: comp.adjustedProfit },
+        { sheet: 'p3', ref: 'I99', value: 0 }
+      );
       // Section totals (TOTAL REVENUE/ASSETS/…) are typed inputs on the firm's
       // returns — derive them arithmetically, but ONLY for rows this template
       // carries as non-formula inputs (a self-computing template is never
@@ -729,8 +761,20 @@ export function createApp() {
       const priorReviewWarnings = (session.priorReview?.findings ?? []).map(
         (f) => `Prior-year return review (${f.severity}): ${f.message}`
       );
-
-      const comp = computeTax(netProfit, answers ?? {});
+      // The G99 write above uses the app's own adjustedProfit, which nets off
+      // dividendsExemptPE — but that exemption is only anchored into the CfR
+      // template via TRA8 (a formula-fed schedule this app does not populate),
+      // so the template's own field 36a (E95) will disagree with G99 until TRA8
+      // is completed manually. Flag it — this is the one case where the row-99
+      // fix can't fully close the loop by itself.
+      const peDividendWarning =
+        (answers?.['dividendsExemptPE'] ?? 0) !== 0
+          ? [
+              `Participation-exemption dividends confirmed (€${Math.abs(answers!['dividendsExemptPE']).toFixed(2)}) — ` +
+                `complete TRA8 with the matching exempt amount so the template's own field 36a agrees with the tax-account ` +
+                `allocation on p3 row 99, then verify the "Sum of fields 37a to 37c" cross-check on p3.`,
+            ]
+          : [];
       const summary = renderComputationSummary({
         clientName: clientName || 'Client',
         yearOfAssessment: yearOfAssessment || '',
@@ -743,7 +787,7 @@ export function createApp() {
             const r = fill.applied.get(a.accountCode)!;
             return { ledger: `${a.accountCode} ${a.accountName}`, cfrCode: r.cfrCode, sheet: r.sheet, amount: a.cyBalance };
           }),
-        warnings: [...session.warnings, ...priorReviewWarnings, ...(tie && !tie.ok ? tie.issues : [])],
+        warnings: [...session.warnings, ...priorReviewWarnings, ...peDividendWarning, ...(tie && !tie.ok ? tie.issues : [])],
         unmatchedCodes: unmatched,
       });
 

@@ -5,7 +5,7 @@ import { syntheticCfrWorkbook } from './helpers/synthetic';
 describe('template-reader', () => {
   it('lists sheet names', async () => {
     const wb = await syntheticCfrWorkbook({ bSheet: [], income: [] });
-    expect(await listSheetNames(wb)).toEqual(['B_Sheet', 'Income', 'p3']);
+    expect(await listSheetNames(wb)).toEqual(['B_Sheet', 'Income', 'p3', 'p4']);
   });
 
   it('reads (code, value) pairs from requested sheets', async () => {
@@ -63,7 +63,7 @@ describe('template-reader', () => {
       income: [],
       prefixed: true,
     });
-    expect(await listSheetNames(wb)).toEqual(['B_Sheet', 'Income', 'p3']);
+    expect(await listSheetNames(wb)).toEqual(['B_Sheet', 'Income', 'p3', 'p4']);
     const vals = await readCfrValues(wb, ['B_Sheet']);
     expect(vals).toEqual([{ sheet: 'B_Sheet', cfrCode: 2150, row: 10, value: 111.5 }]);
   });

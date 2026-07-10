@@ -12,6 +12,7 @@ const CT = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
 <Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
 <Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/worksheets/sheet4.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
 </Types>`;
 
 const ROOT_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -28,6 +29,7 @@ function workbookXml(p: string): string {
 <${p}sheet name="B_Sheet" sheetId="1" r:id="rId1"/>
 <${p}sheet name="Income" sheetId="2" r:id="rId2"/>
 <${p}sheet name="p3" sheetId="3" r:id="rId3"/>
+<${p}sheet name="p4" sheetId="4" r:id="rId4"/>
 </${p}sheets>
 </${p}workbook>`;
 }
@@ -37,7 +39,18 @@ const WB_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>
 <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>
+<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet4.xml"/>
 </Relationships>`;
+
+/** Sheet made of bare rows, each pre-seeded with the given cell refs (all direct addresses, no CfR-code convention) — mirrors p3/p4 on real CfR templates closely enough for ANCHORS writes to land. */
+function directRefSheetXml(rowsToRefs: Record<number, string[]>, p = ''): string {
+  const body = Object.entries(rowsToRefs)
+    .map(([row, refs]) => `<${p}row r="${row}">${refs.map((ref) => `<${p}c r="${ref}"><${p}v>0</${p}v></${p}c>`).join('')}</${p}row>`)
+    .join('');
+  const ns = p ? `xmlns:x="${MAIN_NS}"` : `xmlns="${MAIN_NS}"`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<${p}worksheet ${ns}><${p}sheetData>${body}</${p}sheetData></${p}worksheet>`;
+}
 
 /** Sheet with rows: col C = CfR code, col E = existing value (0), col D untouched formula cell. */
 function sheetXml(rows: SyntheticRow[], p = ''): string {
@@ -86,11 +99,17 @@ export async function syntheticCfrWorkbook(opts: {
   zip.file('xl/_rels/workbook.xml.rels', WB_RELS);
   zip.file('xl/worksheets/sheet1.xml', sheetXml(opts.bSheet, p));
   zip.file('xl/worksheets/sheet2.xml', sheetXml(opts.income, p));
+  // Rows for every ANCHORS ref (template-map.ts) plus row 99 (fields 37a/37b/37c:
+  // IPA/MTA/FIA split) — real CfR templates always carry these; the app now
+  // writes all of them directly on every generate.
   zip.file(
     'xl/worksheets/sheet3.xml',
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<${p}worksheet ${ns}><${p}sheetData><${p}row r="6"><${p}c r="E6"><${p}v>0</${p}v></${p}c></${p}row></${p}sheetData></${p}worksheet>`
+    directRefSheetXml(
+      { 6: ['E6'], 8: ['E8'], 20: ['E20'], 33: ['E33', 'B33'], 41: ['E41', 'B41'], 42: ['E42', 'B42'], 99: ['E99', 'G99', 'I99'] },
+      p
+    )
   );
+  zip.file('xl/worksheets/sheet4.xml', directRefSheetXml({ 13: ['O13'], 52: ['O52'] }, p));
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
