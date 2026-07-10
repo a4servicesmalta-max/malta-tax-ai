@@ -248,7 +248,10 @@
         +'<td style="'+cell+';color:#5c5951">'+esc(r.ya||'—')+'</td>'
         +'<td style="'+cell+';text-align:right;font-family:\'JetBrains Mono\',monospace;color:#14161a">'+eur(r.taxCharge)+'</td>'
         +'<td style="'+cell+';color:#5c5951">'+esc(date)+'</td>'
-        +'<td style="'+cell+';border-radius:0 12px 12px 0;text-align:right"><a href="/api/returns/'+encodeURIComponent(r.id)+'/return.xlsx" style="display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:9999px;font-size:12.5px;font-weight:600;color:#fff;background:#494fdf">Download .xlsx</a></td>'
+        +'<td style="'+cell+';border-radius:0 12px 12px 0;text-align:right;white-space:nowrap">'
+          +'<a href="/new-return?reopen='+encodeURIComponent(r.id)+'" style="display:inline-flex;align-items:center;padding:9px 14px;border-radius:9999px;font-size:12.5px;font-weight:600;color:#3a3d40;background:#fff;border:1px solid #e7e5e0;margin-right:8px">Reopen &amp; edit</a>'
+          +'<a href="/api/returns/'+encodeURIComponent(r.id)+'/summary.html" target="_blank" style="display:inline-flex;align-items:center;padding:9px 14px;border-radius:9999px;font-size:12.5px;font-weight:600;color:#3a3d40;background:#fff;border:1px solid #e7e5e0;margin-right:8px">Workings</a>'
+          +'<a href="/api/returns/'+encodeURIComponent(r.id)+'/return.xlsx" style="display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:9999px;font-size:12.5px;font-weight:600;color:#fff;background:#494fdf">Download .xlsx</a></td>'
         +'</tr>';
     }).join('');
   });

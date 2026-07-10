@@ -19,6 +19,8 @@ export interface SummaryInput {
   mappingRows: Array<{ ledger: string; cfrCode: number; sheet: string; amount: number }>;
   warnings: string[];
   unmatchedCodes: Array<{ sheet: string; cfrCode: number }>;
+  /** Standing declarations written to the return (flags, p2 questionnaire, identity) — for preparer review. */
+  declarations?: string[];
   /** Shareholder refund working — guidance only, never anchored to the return. */
   refund?: RefundComputation;
   /** NID working — guidance only, never anchored to the return (TRA100 is manual). */
@@ -125,6 +127,13 @@ ${deadlines ? `<h2>Filing deadlines (Year of Assessment ${esc(input.yearOfAssess
 <table><tr><th>Adjustment</th><th>Amount €</th><th>Treatment</th></tr>${adj || '<tr><td colspan="3">None</td></tr>'}</table>
 <h2>Account mapping (provenance)</h2>
 <table><tr><th>Ledger account</th><th>Sheet</th><th>CfR code</th><th>Amount €</th></tr>${map}</table>
+${
+  input.declarations?.length
+    ? `<h2>Declarations written to the return</h2><p class="notes">Standing answers the firm gives on every filing — review each before submitting.</p><ul>${input.declarations
+        .map((d) => `<li>${esc(d)}</li>`)
+        .join('\n')}</ul>`
+    : ''
+}
 ${warn ? `<h2>Warnings</h2><div class="warn"><ul>${warn}</ul></div>` : ''}
 ${input.refund ? renderRefundSection(input.refund) : ''}
 ${input.nid ? renderNidSection(input.nid) : ''}

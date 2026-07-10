@@ -248,6 +248,32 @@ export const TOTAL_CODE_KEYS = new Set([
 export function applyClosingEntry(codeCells: CfrCodeCell[], templateKeys: Set<string>): CfrCodeCell[] {
   const bsSum = codeCells.filter((c) => c.sheet === 'B_Sheet').reduce((a, c) => a + c.amount, 0);
   const incSum = codeCells.filter((c) => c.sheet === 'Income').reduce((a, c) => a + c.amount, 0);
+  // Post-closing signature: B_Sheet balances on its own (closing RE already
+  // absorbs the year's result) while the P&L lines are still stated — the
+  // firm's "ETB for tax" workflow (verified on Northwind YA2024: filed 7501
+  // b/f 162,429 + loss 31,331 = 7600 c/f 193,760 = 3905). Nothing to re-post;
+  // only the Income sheet's typed RE-reconciliation memo rows are derived so
+  // the template's own retained-earnings check ties.
+  if (Math.abs(bsSum) <= 1 && Math.abs(incSum) > 5) {
+    const closingRe = codeCells.find((c) => c.sheet === 'B_Sheet' && c.cfrCode === 3905)?.amount;
+    if (closingRe === undefined) return codeCells;
+    const out = codeCells.map((c) => ({ ...c }));
+    const has = (k: string) => out.some((c) => `${c.sheet}:${c.cfrCode}` === k);
+    if (templateKeys.has('Income:7501') && !has('Income:7501')) {
+      out.push({ sheet: 'Income', cfrCode: 7501, amount: round2(closingRe - incSum) });
+    }
+    if (templateKeys.has('Income:7600') && !has('Income:7600')) {
+      out.push({ sheet: 'Income', cfrCode: 7600, amount: round2(closingRe) });
+    }
+    // 7050 (result for the year) is a typed input the firm always files; the
+    // writer targets the FIRST 7050 row, which is where preparers type it
+    // (verified on Northwind YA2024). Derived+best-effort: on a template
+    // whose 7050 self-computes the write is skipped/overwritten harmlessly.
+    if (templateKeys.has('Income:7050') && !has('Income:7050')) {
+      out.push({ sheet: 'Income', cfrCode: 7050, amount: round2(incSum) });
+    }
+    return out;
+  }
   // Pre-closing signature: B_Sheet off by exactly the P&L result. The residual
   // tolerance allows small client-side rounding in the ETB itself (a real file
   // carried a EUR 2 imbalance on an 18.7M balance sheet).
@@ -265,6 +291,10 @@ export function applyClosingEntry(codeCells: CfrCodeCell[], templateKeys: Set<st
   }
   if (templateKeys.has('Income:7600') && !has('Income:7600')) {
     out.push({ sheet: 'Income', cfrCode: 7600, amount: round2(preClosingRe - bsSum) });
+  }
+  // See the post-closing branch — same always-typed 7050 result row.
+  if (templateKeys.has('Income:7050') && !has('Income:7050')) {
+    out.push({ sheet: 'Income', cfrCode: 7050, amount: round2(incSum) });
   }
   return out;
 }

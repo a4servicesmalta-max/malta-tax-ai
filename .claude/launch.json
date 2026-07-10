@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "taxgen",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["tsx", "src/server.ts"],
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "set TAXGEN_OPEN=1&& set PORT=4380&& npx tsx src/server.ts"],
       "port": 4380
     }
   ]

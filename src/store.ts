@@ -38,6 +38,15 @@ export interface ReturnRow {
   ya: string;
   taxCharge: number;
   createdAt: string;
+  /** Everything the preparer confirmed — lets a generated return be reopened and edited. */
+  inputs?: {
+    rules: unknown[];
+    answers: Record<string, number>;
+    excluded: string[];
+    clientName: string;
+    companyTin: string;
+    yearOfAssessment: string;
+  };
 }
 
 function readJson<T>(file: string, fallback: T): T {
@@ -114,4 +123,13 @@ export function readReturnFile(id: string, ext: 'xlsx' | 'html'): Buffer | null 
 export function returnFilePath(id: string, ext: 'xlsx' | 'html'): string | null {
   const p = path.join(FILES_DIR, `${id}.${ext}`);
   return fs.existsSync(p) ? p : null;
+}
+
+/**
+ * Durable copy of a return's source session (template/prior buffers +
+ * state.json) — sessions themselves are swept after 48h, but a generated
+ * return must stay reopenable indefinitely.
+ */
+export function returnSessionDir(id: string): string {
+  return path.join(FILES_DIR, `${id}.session`);
 }

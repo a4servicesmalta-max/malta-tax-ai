@@ -101,6 +101,7 @@
             </div>
             <div style="display:flex;flex-direction:column;gap:10px">
               <div><label style="display:block;font-size:13px;color:#5c5951;margin-bottom:6px">Client name</label><input id="clientName" placeholder="ABC Trading Ltd" class="fld"></div>
+              <div><label style="display:block;font-size:13px;color:#5c5951;margin-bottom:6px">Income tax number (TIN)</label><input id="companyTin" placeholder="999123456" class="fld"></div>
               <div><label style="display:block;font-size:13px;color:#5c5951;margin-bottom:6px">Year of assessment</label><input id="ya" placeholder="YA2026" class="fld"></div>
             </div>
           </div>
@@ -271,6 +272,10 @@ $('analyseBtn').addEventListener('click', async ()=>{
   $('analyseIdle').style.display='inline-flex'; $('analyseBusy').style.display='none'; refreshAnalyse();
   if(!res.ok){ $('uploadMsgs').innerHTML=`<div class="callout c-err">${esc(data.error||'Upload failed.')}</div>`; return; }
   $('uploadMsgs').innerHTML='';
+  enterStep2(data);
+});
+
+function enterStep2(data){
   SESSION=data.sessionId; ACCOUNTS=data.accounts||[]; QUESTIONS=(data.interview&&data.interview.questions)||[]; PRIOR_REVIEW=data.priorReview||null; COMPUTED=false;
   TPL_CODES=data.templateCodes||[]; TPL_KEYS=new Set(TPL_CODES.map(c=>c.sheet+':'+c.code));
   buildCodeDatalists();
@@ -278,13 +283,44 @@ $('analyseBtn').addEventListener('click', async ()=>{
   if(data.recalledFrom){
     $('uploadMsgs').innerHTML=`<div class="callout c-ok">↺ Returning client recognised (“${esc(data.recalledFrom)}”) — your previously confirmed mapping has been applied. Review and adjust only what changed.</div>`;
   }
+  // Identity lifted from the prior return: pre-fill (never overwrite what the
+  // preparer already typed) — this is what lands on p1 as Ref/Name.
+  if(data.priorIdentity){
+    if(data.priorIdentity.name && !$('clientName').value.trim()) $('clientName').value=data.priorIdentity.name;
+    if(data.priorIdentity.tin && !$('companyTin').value.trim()) $('companyTin').value=data.priorIdentity.tin;
+  }
   renderPriorReview();
   renderCrossCheck(data.crossCheck);
   renderMapping(data.proposal&&data.proposal.rules||[]);
   renderInterview();
+  // Reopened return: restore every confirmed answer + identity field.
+  if(data.savedInputs){
+    const si=data.savedInputs;
+    if(si.clientName) $('clientName').value=si.clientName;
+    if(si.companyTin) $('companyTin').value=si.companyTin;
+    if(si.yearOfAssessment) $('ya').value=si.yearOfAssessment;
+    for(const inp of document.querySelectorAll('.answer')){
+      if(si.answers && si.answers[inp.dataset.id]!=null) inp.value=si.answers[inp.dataset.id];
+    }
+    for(const tr of document.querySelectorAll('#mapBody tr')){
+      if((si.excluded||[]).includes(tr.dataset.code)) tr.querySelector('.excl').checked=true;
+    }
+  }
   $('compPanel').innerHTML=''; $('reviewWrap').style.display='none'; $('reviewPanel').innerHTML=''; $('genMsgs').innerHTML='';
   setStep(2); refreshGate();
-});
+}
+
+// Reopen a previously generated return (?reopen=<returnId>) straight into Step 2.
+(async function(){
+  const rid=new URLSearchParams(location.search).get('reopen');
+  if(!rid) return;
+  let res,data;
+  try{ res=await fetch(`/api/returns/${encodeURIComponent(rid)}/reopen`,{method:'POST'}); data=await res.json(); }
+  catch(err){ data={error:String(err)}; res={ok:false}; }
+  if(!res.ok){ $('uploadMsgs').innerHTML=`<div class="callout c-err">${esc(data.error||'Could not reopen this return.')}</div>`; return; }
+  enterStep2(data);
+  $('genMsgs').innerHTML='<div class="callout c-ok">↺ Return reopened — your confirmed mapping and answers are restored. Adjust anything, re-prepare the computation, and generate again.</div>';
+})();
 
 function renderPriorReview(){
   const p=$('priorReviewPanel');
@@ -498,7 +534,7 @@ $('generateBtn').addEventListener('click', async ()=>{
   let res,data;
   try{
     res=await fetch(`/api/session/${SESSION}/generate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-      ...collectInputs(), clientName:$('clientName').value, yearOfAssessment:$('ya').value, priorReviewAcknowledged:!!(ack&&ack.checked)
+      ...collectInputs(), clientName:$('clientName').value, companyTin:$('companyTin').value, yearOfAssessment:$('ya').value, priorReviewAcknowledged:!!(ack&&ack.checked)
     })}); data=await res.json();
   }catch(err){ data={error:String(err)}; res={ok:false}; }
   if(!res.ok){ $('genMsgs').innerHTML=`<div class="callout c-err">${esc(data.error||'Generation failed.')}</div>`; return; }
@@ -517,7 +553,10 @@ $('generateBtn').addEventListener('click', async ()=>{
   if(data.verification&&data.verification.allWritesVerified){
     m+=`<div class="callout c-ok">✓ Verified before download: all ${data.verification.codeRowsWritten} figures from ${data.verification.accountsIncluded} mapped accounts were written to the return and re-checked in the generated file.</div>`;
   }
-  m+=`<div class="callout c-warn">Before submission: the return's Yes/No declarations and confirmation sections (and any TRA schedules such as capital allowances) cannot be derived from the uploaded documents — open the downloaded return and complete them manually.</div>`;
+  if(data.declarations&&data.declarations.length){
+    m+=`<div class="callout c-ok"><strong>Declarations written to the return — review each:</strong><ul style="margin:8px 0 0 18px;padding:0">${data.declarations.map(d=>`<li style="margin-top:4px">${esc(d)}</li>`).join('')}</ul></div>`;
+  }
+  m+=`<div class="callout c-warn">Before submission: complete any TRA schedules the figures come from (e.g. TRA5 capital allowances per asset class) and review the p1/p2 registration pages — statutory declarations were pre-filled and are listed above.</div>`;
   $('genMsgs').innerHTML=m;
   // Prefer the persisted, streamed download (survives restart + avoids the
   // large-buffer proxy 503); fall back to the in-memory session route.

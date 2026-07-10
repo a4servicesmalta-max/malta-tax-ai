@@ -43,9 +43,17 @@ import {
   grantCredits,
   bootstrapAdmin,
 } from './accounts';
-import { saveReturn, listReturns, findReturn, returnFilePath } from './store';
+import { saveReturn, listReturns, findReturn, returnFilePath, returnSessionDir } from './store';
 import { readTemplateCodes, codeKeySet, type TemplateCode } from './template-codes';
 import { readCfrValues } from './template-reader';
+import {
+  detectTemplateVersion,
+  loadStoredBlank,
+  requiredCellRefs,
+  declarationCells,
+  interestExpenseTotal,
+  readCompanyIdentity,
+} from './firm-defaults';
 
 interface Session {
   accounts: EtbAccount[];
@@ -61,6 +69,10 @@ interface Session {
   output?: { xlsx: Buffer; summary: string };
   /** Client name of the remembered mapping this session was recognised as. */
   recalledFrom?: string | null;
+  /** Detected CfR template vintage (e.g. "TA2_e-CO_2025_Ver 1.1"). */
+  templateVersion?: string | null;
+  /** Company identity lifted from the prior return (UI pre-fill). */
+  priorIdentity?: { tin: string | null; name: string | null };
 }
 
 export function createApp() {
@@ -148,18 +160,15 @@ export function createApp() {
           priorReview: s.priorReview ?? null,
           fsFigures: s.fsFigures ?? null,
           recalledFrom: s.recalledFrom ?? null,
+          templateVersion: s.templateVersion ?? null,
+          priorIdentity: s.priorIdentity ?? null,
         })
       );
     } catch (e) {
       console.warn('[sessions] persist failed:', (e as Error).message);
     }
   }
-  async function getSession(id: string): Promise<Session | undefined> {
-    const inMem = sessions.get(id);
-    if (inMem) return inMem;
-    // Rehydrate from disk (post-restart).
-    if (!/^[0-9a-f-]{36}$/i.test(id)) return undefined;
-    const dir = path.join(SESS_DIR, id);
+  async function rehydrateFrom(dir: string): Promise<Session | undefined> {
     try {
       const state = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
       const template = fs.readFileSync(path.join(dir, 'template.xlsx'));
@@ -175,12 +184,22 @@ export function createApp() {
         priorReview: state.priorReview ?? undefined,
         fsFigures: state.fsFigures ?? undefined,
         recalledFrom: state.recalledFrom ?? null,
+        templateVersion: state.templateVersion ?? null,
+        priorIdentity: state.priorIdentity ?? undefined,
       };
-      sessions.set(id, s);
       return s;
     } catch {
       return undefined;
     }
+  }
+  async function getSession(id: string): Promise<Session | undefined> {
+    const inMem = sessions.get(id);
+    if (inMem) return inMem;
+    // Rehydrate from disk (post-restart).
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return undefined;
+    const s = await rehydrateFrom(path.join(SESS_DIR, id));
+    if (s) sessions.set(id, s);
+    return s;
   }
 
   // ---- Accounts + session auth ----
@@ -333,6 +352,45 @@ export function createApp() {
   app.get('/api/returns/:id/return.xlsx', serveReturnFile('xlsx'));
   app.get('/api/returns/:id/summary.html', serveReturnFile('html'));
 
+  // REOPEN a generated return for editing: rebuild a working session from the
+  // return's durable session snapshot (falling back to the original session
+  // dir for pre-snapshot returns) and hand back the preparer's confirmed
+  // rules/answers — Step 2, exactly where they left off. No AI, no credit.
+  app.post('/api/returns/:id/reopen', async (req, res) => {
+    const row = findReturn(req.params.id);
+    if (!row || row.userId !== res.locals.userId) return res.status(404).json({ error: 'not found' });
+    const session = await rehydrateFrom(returnSessionDir(row.id));
+    if (!session) {
+      return res.status(410).json({
+        error:
+          'The source files for this return are no longer stored (generated before reopening existed) — start a new return with the same uploads instead.',
+      });
+    }
+    const interview = buildInterview(session.accounts, {
+      hasPriorReturn: !!session.priorBuffer,
+      priorLossesBroughtForward: session.priorBuffer ? priorLossesCarriedForward(session.priorBuffer) : null,
+      priorUnabsorbedCaBf: session.priorBuffer ? priorUnabsorbedCapitalAllowancesCf(session.priorBuffer) : null,
+    });
+    const id = crypto.randomUUID();
+    sessions.set(id, session);
+    persistSession(id, session);
+    res.json({
+      sessionId: id,
+      accounts: session.accounts,
+      proposal: { source: 'saved', rules: row.inputs?.rules ?? [] },
+      interview,
+      warnings: session.warnings,
+      fsFigures: session.fsFigures ?? null,
+      crossCheck: null,
+      priorReview: session.priorReview ?? null,
+      templateCodes: session.templateCodes,
+      recalledFrom: null,
+      templateVersion: session.templateVersion ?? null,
+      priorIdentity: session.priorIdentity ?? null,
+      savedInputs: row.inputs ?? null,
+    });
+  });
+
   app.post(
     '/api/session',
     upload.fields([
@@ -353,9 +411,33 @@ export function createApp() {
         stage(`files received (etb=${etbFile?.size ?? 0}b tpl=${tplFile?.size ?? 0}b prior=${files?.prior?.[0]?.size ?? 0}b)`);
         if (!etbFile || !tplFile) return res.status(400).json({ error: 'etb and template files are required' });
 
+        // SWAP-TO-BLANK: preparers routinely upload a USED return (any
+        // client's) as the "template". When its vintage matches a verified
+        // blank we ship, use the blank instead — every stale figure, flag,
+        // name and TIN from the donor file is gone by construction.
+        let templateBuffer = tplFile.buffer;
+        const templateVersion = await detectTemplateVersion(templateBuffer);
+        const swapWarnings: string[] = [];
+        if (templateVersion) {
+          const blank = loadStoredBlank(templateVersion);
+          if (blank) {
+            templateBuffer = blank;
+            swapWarnings.push(
+              `Template recognised as ${templateVersion} — generated on a verified blank copy of the official template. ` +
+                `Any figures or answers left in the uploaded file were ignored.`
+            );
+          } else {
+            swapWarnings.push(
+              `Template vintage ${templateVersion} is not in the verified-blank library — values typed outside the ` +
+                `account rows are NOT auto-cleared. Make sure the uploaded template is blank.`
+            );
+          }
+        }
+        stage(`template version ${templateVersion ?? 'unknown'}${templateBuffer !== tplFile.buffer ? ' (swapped to stored blank)' : ''}`);
+
         // Read the template's real data-entry rows FIRST — a wrong file here is
         // the express route to a silently empty return.
-        const templateCodes = readTemplateCodes(tplFile.buffer);
+        const templateCodes = readTemplateCodes(templateBuffer);
         if (templateCodes.length === 0) {
           return res.status(400).json({
             error:
@@ -366,13 +448,14 @@ export function createApp() {
         stage(`template codes read (${templateCodes.length})`);
         const parsed = parseEtb(etbFile.buffer);
         stage(`etb parsed (${parsed.accounts.length} accounts)`);
-        const warnings = [...parsed.warnings];
+        const warnings = [...swapWarnings, ...parsed.warnings];
         const session: Session = {
           accounts: parsed.accounts,
           warnings,
-          template: tplFile.buffer,
+          template: templateBuffer,
           templateCodes,
           codeKeys: codeKeySet(templateCodes),
+          templateVersion,
         };
 
         if (files?.fs?.[0]) {
@@ -385,6 +468,10 @@ export function createApp() {
         let priorReview: PriorReturnReview | undefined;
         if (files?.prior?.[0]) {
           session.priorBuffer = files.prior[0].buffer;
+          // The client's identity carries over from the prior filing — lift it
+          // so the preparer doesn't retype (and the new return can't ship with
+          // the donor template's name/TIN).
+          session.priorIdentity = await readCompanyIdentity(files.prior[0].buffer);
           // Review-first gate: run BEFORE the prior return is used as a basis for anything.
           priorReview = await reviewPriorReturn(files.prior[0].buffer);
           session.priorReview = priorReview;
@@ -477,6 +564,8 @@ export function createApp() {
           // Returning client recognised by ledger overlap — mapping replayed
           // from the firm's own confirmed history.
           recalledFrom,
+          templateVersion,
+          priorIdentity: session.priorIdentity ?? null,
         });
       } catch (e) {
         stage(`FAILED: ${(e as Error).message}`);
@@ -559,10 +648,11 @@ export function createApp() {
     const session = await getSession(req.params.id);
     if (!session) return res.status(404).json({ error: 'session not found' });
     try {
-      const { rules, answers, clientName, yearOfAssessment, excluded, priorReviewAcknowledged } = req.body as {
+      const { rules, answers, clientName, companyTin, yearOfAssessment, excluded, priorReviewAcknowledged } = req.body as {
         rules: MappingRule[];
         answers: Record<string, number>;
         clientName: string;
+        companyTin?: string;
         yearOfAssessment: string;
         excluded: string[];
         priorReviewAcknowledged?: boolean;
@@ -607,6 +697,27 @@ export function createApp() {
       const comp = computeTax(netProfit, answers ?? {});
       const interviewFills = fillsFromAnswers(answers ?? {});
       const directCells = [...fill.directCells];
+
+      // Company identity + the firm's standing declarations (attachment-
+      // complete flags, p2 questionnaire, refund-by-cheque, ATAD TRA111).
+      // Deterministic writes, each listed for the preparer; constrained to
+      // the refs THIS template's own "Required!" markers declare mandatory.
+      const included = session.accounts.filter((a) => !(excluded ?? []).includes(a.accountCode));
+      const { required, sheets } = await requiredCellRefs(session.template);
+      const decl = declarationCells({
+        required,
+        sheets,
+        companyName: clientName || session.priorIdentity?.name || undefined,
+        companyTin: companyTin || session.priorIdentity?.tin || undefined,
+        interestExpense: interestExpenseTotal(included),
+        answers: answers ?? {},
+      });
+      directCells.push(...decl.cells);
+      if (!(companyTin || session.priorIdentity?.tin)) {
+        decl.notes.push(
+          'No taxpayer reference (TIN) was provided — p1 was left without it. Enter the income tax number before submitting.'
+        );
+      }
       const writtenAnchorRefs = new Set<string>();
       for (const f of interviewFills) {
         if (f.anchorId && ANCHORS[f.anchorId]) {
@@ -829,6 +940,7 @@ export function createApp() {
           }),
         warnings: [...session.warnings, ...priorReviewWarnings, ...peDividendWarning, ...(tie && !tie.ok ? tie.issues : [])],
         unmatchedCodes: unmatched,
+        declarations: decl.notes,
         refund,
         nid,
       });
@@ -850,10 +962,25 @@ export function createApp() {
             ya: yearOfAssessment || '',
             taxCharge: comp.taxCharge,
             createdAt: new Date().toISOString(),
+            inputs: {
+              rules: rules ?? [],
+              answers: answers ?? {},
+              excluded: excluded ?? [],
+              clientName: clientName || '',
+              companyTin: companyTin || session.priorIdentity?.tin || '',
+              yearOfAssessment: yearOfAssessment || '',
+            },
           },
           buffer,
           summary
         );
+        // Snapshot the source session so the return stays reopenable after
+        // the 48h session sweep.
+        try {
+          fs.cpSync(path.join(SESS_DIR, req.params.id), returnSessionDir(returnId), { recursive: true });
+        } catch (e) {
+          console.warn('[returns] session snapshot failed:', (e as Error).message);
+        }
         creditsLeft = currentUser(cookieToken(req))?.credits ?? null;
       }
 
@@ -883,7 +1010,15 @@ export function createApp() {
         'Malta Tax AI — return generated',
         `A tax return was generated on tax.vacei.com:\n\n  Client: ${clientName || '(unnamed)'}\n  Year of assessment: ${yearOfAssessment || '(unspecified)'}\n  Net profit per accounts: ${netProfit.toFixed(2)}`
       );
-      res.json({ downloadReady: true, unmatched, tie: tie ?? null, returnId, credits: creditsLeft, verification });
+      res.json({
+        downloadReady: true,
+        unmatched,
+        tie: tie ?? null,
+        returnId,
+        credits: creditsLeft,
+        verification,
+        declarations: decl.notes,
+      });
     } catch (e) {
       res.status(400).json({ error: (e as Error).message });
     }

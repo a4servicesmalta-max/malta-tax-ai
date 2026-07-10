@@ -281,6 +281,38 @@ export function buildInterview(etb: EtbAccount[], ctx: InterviewContext): Interv
     // See nidReferenceRate above — same reasoning.
     required: false,
   });
+  // p2 statutory questionnaire answers written onto the return itself (see
+  // firm-defaults.ts declarationCells) — the CfR e-return marks them Required.
+  const payrollHits = etb.filter((a) => /wage|salar|payroll|remunerat/i.test(a.accountName));
+  questions.push({
+    id: 'avgEmployees',
+    text: 'Average number of employees during the year, including office holders (p2 questionnaire — written to the return).',
+    legalBasis: 'TA2 p2 statutory questionnaire; drives the FS3/FS7 wages-reported declaration.',
+    kind: 'amount',
+    // No payroll in the ETB = deterministically 0; payroll present = the
+    // headcount is not an ETB-derivable figure, the preparer supplies it.
+    preAnswer: payrollHits.length === 0 ? 0 : null,
+    triggeredBy: payrollHits.map((a) => `${a.accountCode} ${a.accountName}`),
+    required: payrollHits.length > 0,
+  });
+  questions.push({
+    id: 'auditReportQualified',
+    text: 'Is the audit report qualified, or does it carry an emphasis-of-matter paragraph? (p2 questionnaire — written to the return; if yes, the description must be typed into p2 cell C78.)',
+    legalBasis: 'TA2 p2 statutory questionnaire on the audited financial statements accompanying the return.',
+    kind: 'yesno',
+    preAnswer: 0,
+    triggeredBy: [],
+    required: false,
+  });
+  questions.push({
+    id: 'atadStandaloneEntity',
+    text: 'Is the company a standalone entity in terms of ATAD Regulation 4(3)(b), or a financial undertaking? (p2 questionnaire — written to the return.)',
+    legalBasis: 'S.L. 123.187 (EU Anti-Tax Avoidance Directives Implementation Regulations) Reg. 4(3)(b).',
+    kind: 'yesno',
+    preAnswer: 0,
+    triggeredBy: [],
+    required: false,
+  });
   return { questions };
 }
 
@@ -303,6 +335,9 @@ export const LABELS: Record<string, string> = {
   nidClaimed: 'NID: claimed this year?',
   nidReferenceRate: 'NID: reference rate',
   nidRiskCapital: 'NID: risk capital',
+  avgEmployees: 'p2: average number of employees',
+  auditReportQualified: 'p2: audit report qualified / emphasis of matter?',
+  atadStandaloneEntity: 'p2: ATAD standalone entity / financial undertaking?',
 };
 
 /**
@@ -321,6 +356,11 @@ const NON_FILL_IDS = new Set([
   'nidClaimed',
   'nidReferenceRate',
   'nidRiskCapital',
+  // p2 questionnaire answers — written as declarations (firm-defaults.ts),
+  // not tax adjustments.
+  'avgEmployees',
+  'auditReportQualified',
+  'atadStandaloneEntity',
 ]);
 
 /**
