@@ -1,6 +1,6 @@
 /**
  * Malta statutory wear-and-tear (capital allowance) rates, from the Deduction for
- * Wear and Tear of Plant and Machinery Rules (SL 123.10) under the Income Tax Act
+ * Wear and Tear of Plant and Machinery Rules (S.L. 123.01) under the Income Tax Act
  * (Cap. 123), as published by the CfR. Rates verified 2026-07 against PwC's Malta
  * corporate tax summary (taxsummaries.pwc.com/malta/corporate/deductions).
  *
@@ -34,8 +34,12 @@ export const WEAR_AND_TEAR: WearAndTearCategory[] = [
   { category: 'Lifts and escalators', years: 10, match: /lift|elevator|escalator/i },
   { category: 'Ships and vessels', years: 10, match: /ship|vessel|\bboat\b|yacht/i },
   { category: 'Electrical and plumbing installations; sanitary fittings', years: 15, match: /electrical install|plumbing|sanitary/i },
-  // Generic plant & machinery last: "other machinery" 5 yrs / "other plant" 10 yrs.
-  { category: 'Plant and machinery (general)', years: 5, match: /plant|machiner|equipment|tools|apparatus/i },
+  // Generic catch-all last, split per the statutory table: "other machinery" is
+  // 5 yrs/20%, "other plant" a separate, slower 10 yrs/10% category — an
+  // unclassified "plant"/generic-equipment name defaults to the slower, more
+  // conservative rate rather than being folded into "machinery".
+  { category: 'Other machinery', years: 5, match: /machiner/i },
+  { category: 'Other plant', years: 10, match: /plant|equipment|tools|apparatus/i },
 ];
 
 /** The statutory straight-line rate implied by the minimum write-off period. */
@@ -76,7 +80,7 @@ export function wearAndTearGuidance(accountNames: string[]): string[] {
     });
   if (hasBuildings) {
     lines.push(
-      'Industrial buildings & structures: max 2% per annum, plus a 10% initial allowance in the year of acquisition (industrial use only — offices/retail generally do not qualify).'
+      'Industrial buildings & structures: max 2% per annum, plus a 10% initial allowance in the year the building is first used for the qualifying purpose (factories, warehouses, hotels, car parks, and office business centres over 2,500 sqm first used after 1 Jan 2016 all qualify; ordinary offices/retail generally do not).'
     );
   }
   return lines;

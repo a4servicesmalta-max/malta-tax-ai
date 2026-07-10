@@ -11,6 +11,12 @@ describe('capital allowances (Malta wear-and-tear rates)', () => {
     expect(classifyAsset('Trade debtors')).toBeNull();
   });
 
+  it('separates "other machinery" (5yr/20%) from "other plant" (10yr/10%) — not a shared 5yr bucket', () => {
+    expect(classifyAsset('Factory machinery')?.years).toBe(5);
+    expect(classifyAsset('Bottling plant')?.category).toBe('Other plant');
+    expect(classifyAsset('Bottling plant')?.years).toBe(10);
+  });
+
   it('software matches before generic computer (order matters)', () => {
     expect(classifyAsset('Computer software')?.category).toBe('Computer software');
   });

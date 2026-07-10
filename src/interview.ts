@@ -18,6 +18,15 @@ export interface Question {
   preAnswer: number | null;
   /** Which ETB accounts triggered this question, as "<code> <name>" (provenance shown to the preparer). */
   triggeredBy: string[];
+  /**
+   * True when this question genuinely requires a human decision, false when a
+   * deterministic figure already exists and the preparer only needs to
+   * glance and confirm. Computed as `preAnswer === null`, EXCEPT
+   * `dividendsExemptPE`, which is always `true` — the participation-exemption
+   * anti-abuse test is a legal judgment call even when a netted amount can be
+   * pre-filled from the ETB, so it must never be silently auto-accepted.
+   */
+  required: boolean;
 }
 
 export interface Interview {
@@ -128,13 +137,17 @@ export function buildInterview(etb: EtbAccount[], ctx: InterviewContext): Interv
     if (hits.length === 0) continue;
     const net = Math.round(hits.reduce((acc, a) => acc + a.cyBalance, 0) * 100) / 100;
     const signOk = t.expectedSign === 'dr' ? net > 0 : net < 0;
+    const preAnswer = signOk ? Math.abs(net) : null;
     questions.push({
       id: t.id,
       text: t.text,
       legalBasis: t.legalBasis,
       kind: 'amount',
-      preAnswer: signOk ? Math.abs(net) : null,
+      preAnswer,
       triggeredBy: hits.map((a) => `${a.accountCode} ${a.accountName}`),
+      // dividendsExemptPE: the amount can be netted from the ETB, but PE
+      // eligibility is a legal judgment — never silently auto-accepted.
+      required: t.id === 'dividendsExemptPE' ? true : preAnswer === null,
     });
   }
   // Always asked — continuity items.
@@ -145,6 +158,7 @@ export function buildInterview(etb: EtbAccount[], ctx: InterviewContext): Interv
     kind: 'amount',
     preAnswer: ctx.priorLossesBroughtForward ?? null,
     triggeredBy: [],
+    required: (ctx.priorLossesBroughtForward ?? null) === null,
   });
   questions.push({
     id: 'unabsorbedCapitalAllowancesBf',
@@ -154,19 +168,21 @@ export function buildInterview(etb: EtbAccount[], ctx: InterviewContext): Interv
     kind: 'amount',
     preAnswer: ctx.priorUnabsorbedCaBf ?? null,
     triggeredBy: [],
+    required: (ctx.priorUnabsorbedCaBf ?? null) === null,
   });
   const caGuidance = wearAndTearGuidance(etb.map((a) => a.accountName));
   questions.push({
     id: 'capitalAllowancesTotal',
     text: 'Total capital allowances claimed for the year (per the capital allowances computation / TRA5).',
     legalBasis:
-      'Cap. 123 Art. 14(1)(f)(j) & Deduction (Wear and Tear) Rules SL 123.10 — statutory allowances on plant, machinery and industrial buildings.' +
+      'Cap. 123 Art. 14(1)(f)(j) & Deduction (Wear and Tear) Rules S.L. 123.01 — statutory allowances on plant, machinery and industrial buildings.' +
       (caGuidance.length
         ? ' Statutory write-off periods for the asset categories in this ETB — ' + caGuidance.join(' ')
         : ''),
     kind: 'amount',
     preAnswer: null,
     triggeredBy: [],
+    required: true,
   });
   return { questions };
 }

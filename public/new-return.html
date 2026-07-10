@@ -194,6 +194,20 @@
 
 <script>
 let SESSION=null, ACCOUNTS=[], QUESTIONS=[], PRIOR_REVIEW=null, COMPUTED=false, TPL_CODES=[], TPL_KEYS=new Set();
+// Mirrors src/interview.ts LABELS — short labels for the collapsed "confirmed"
+// summary line. Falls back to the full question text for any id not listed.
+const LABELS={
+  depreciationAddBack:'Add back: depreciation/amortisation',
+  finesPenaltiesAddBack:'Add back: fines and penalties',
+  donationsAddBack:'Add back: donations/sponsorships',
+  entertainmentAddBack:'Add back: entertainment',
+  unrealizedFxAddBack:'Adjust: unrealised exchange differences',
+  dividendsExemptPE:'Exempt: participation exemption dividends',
+  generalProvisionsAddBack:'Add back: general provisions/impairments',
+  lossesBroughtForward:'Deduct: losses brought forward',
+  capitalAllowancesTotal:'Deduct: capital allowances',
+  unabsorbedCapitalAllowancesBf:'Deduct: unabsorbed capital allowances b/f',
+};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const eur=n=>Number(n).toLocaleString('en-MT',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -314,9 +328,8 @@ function renderMapping(rules){
   $('mapBody').addEventListener('input',invalidate);
   $('mapBody').addEventListener('change',invalidate);
 }
-function renderInterview(){
-  $('interview').innerHTML=QUESTIONS.map(q=>`
-    <div>
+function questionField(q){
+  return `<div>
       <p style="font-size:14.5px;color:#14161a;font-weight:600;margin:0 0 4px">${esc(q.text)}</p>
       <p style="font-size:12.5px;color:#8a857c;font-style:italic;margin:0 0 8px">${esc(q.legalBasis||'')}</p>
       <div style="display:flex;align-items:center;gap:10px">
@@ -324,7 +337,27 @@ function renderInterview(){
         <input type="number" step="0.01" class="answer mono" data-id="${esc(q.id)}" value="${q.preAnswer==null?'':q.preAnswer}" style="width:160px;padding:9px 12px;border-radius:9px;border:1px solid #ddd9d2;background:#f6f5f2;font-size:13px;color:#14161a">
         ${q.preAnswer!=null?'<span style="font-size:12px;color:#a8a49c">(pre-filled from ETB — confirm)</span>':''}
       </div>
-    </div>`).join('');
+    </div>`;
+}
+function renderInterview(){
+  const required=QUESTIONS.filter(q=>q.required);
+  const confirmed=QUESTIONS.filter(q=>!q.required);
+  let html='';
+  if(required.length){
+    html+=`<div>
+      <div class="mono" style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--indigo);margin-bottom:12px">Requires your input</div>
+      <div style="display:flex;flex-direction:column;gap:18px">${required.map(questionField).join('')}</div>
+    </div>`;
+  }
+  if(confirmed.length){
+    html+=`<details style="margin-top:${required.length?'22px':'0'}">
+      <summary style="cursor:pointer;font-family:var(--font-heading);font-size:14.5px;color:#14161a;padding:4px 0">Confirmed from your accounts — review or edit</summary>
+      <div style="display:flex;flex-direction:column;gap:14px;margin-top:14px">
+        ${confirmed.map(q=>`<details><summary style="cursor:pointer;font-size:13px;color:#3a3d40;padding:6px 0">${q.preAnswer!=null?'€'+esc(eur(q.preAnswer)):'€0.00'} — ${esc(LABELS[q.id]||q.text)} <span style="color:#a8a49c">▸ click to review</span></summary><div style="margin-top:10px">${questionField(q)}</div></details>`).join('')}
+      </div>
+    </details>`;
+  }
+  $('interview').innerHTML=html;
   $('interview').addEventListener('input',invalidate);
 }
 function collectInputs(){
@@ -339,6 +372,7 @@ function collectInputs(){
   return { rules, excluded, answers };
 }
 function invalidate(){
+  $('genMsgs').innerHTML='';
   if(COMPUTED){
     COMPUTED=false;
     $('compPanel').innerHTML='<div class="callout c-warn">Inputs changed — prepare the tax computation again before generating.</div>';
@@ -418,9 +452,28 @@ $('reviewBtn').addEventListener('click', async ()=>{
   panel.innerHTML=`<div style="border-radius:10px;padding:14px 16px;margin-top:12px;background:#faf9f7;border:1px solid #e7e5e0"><div class="mono" style="font-size:11px;color:#8a857c;letter-spacing:0.06em;margin-bottom:4px">REASONABLENESS_REVIEW · ADVISORY · NO FIGURES CHANGED</div>${rows}</div>`;
 });
 
+// Required questions (preAnswer===null, plus dividendsExemptPE always) must be
+// filled before the preparer can advance past Step 2 — a blank one would
+// otherwise submit as 0 (Number('')||0 in collectInputs), i.e. a silently
+// fabricated figure. Returns the first blank required <input>, or null if
+// none are blank.
+function firstBlankRequired(){
+  const requiredIds=new Set(QUESTIONS.filter(q=>q.required).map(q=>q.id));
+  for(const inp of document.querySelectorAll('.answer')){
+    if(requiredIds.has(inp.dataset.id) && inp.value.trim()==='') return inp;
+  }
+  return null;
+}
+
 // ---- GENERATE ----
 $('generateBtn').addEventListener('click', async ()=>{
   if($('generateBtn').disabled) return;
+  const blank=firstBlankRequired();
+  if(blank){
+    $('genMsgs').innerHTML='<div class="callout c-err">Answer every question under “Requires your input” before generating — these cannot be derived from the accounts.</div>';
+    blank.focus();
+    return;
+  }
   const ack=$('priorAck');
   let res,data;
   try{

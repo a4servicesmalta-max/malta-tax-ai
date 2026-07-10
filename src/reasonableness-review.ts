@@ -63,8 +63,13 @@ KNOWN MALTA PITFALLS — check each applicable item against the accounts/computa
 - Pre-trading expenditure only deductible for prescribed categories within 18 months of commencement
   (Art. 14(3)).
 - No deduction without the supplier's VAT tax invoice where one is required (Art. 14(5)).
-- Interest deductibility: ATAD interest limitation — exceeding (net) borrowing costs above €3,000,000
-  limited to 30% of tax-adjusted EBITDA (only flag when interest expense is plainly large).
+- Interest deductibility: ATAD interest limitation — exceeding (net) borrowing costs are deductible up to
+  the GREATER of €3,000,000 (an always-available de minimis floor) or 30% of tax-adjusted EBITDA (only
+  flag when interest expense is plainly large).
+- Notional Interest Deduction (NID): if claimed, it requires approval of ALL shareholders, is capped at 90%
+  of chargeable income before NID (excess carried forward), and profits it relieves are allocated to the
+  Final Tax Account (no refund on distribution) with a matching deemed-interest income consequence for the
+  shareholders — flag if a NID-shaped deduction appears without these markers being addressed.
 - Group relief: only CURRENT-year losses, coterminous accounting periods, membership throughout the basis
   year, and the >50% × 3 tests (votes/profits/assets).
 - Final-tax income (15% withheld investment income, Art. 5A property transfer proceeds, 15% rental option)

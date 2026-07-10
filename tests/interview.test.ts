@@ -17,6 +17,53 @@ describe('interview', () => {
     expect(dep!.legalBasis).toMatch(/Cap\. 123/);
   });
 
+  it('every question carries a boolean required flag', () => {
+    const iv = buildInterview(ETB, { hasPriorReturn: false });
+    expect(iv.questions.length).toBeGreaterThan(0);
+    for (const q of iv.questions) expect(typeof q.required).toBe('boolean');
+  });
+
+  it('a clean pre-answered question (preAnswer !== null) is required: false', () => {
+    const iv = buildInterview(ETB, { hasPriorReturn: false });
+    const dep = iv.questions.find((q) => q.id === 'depreciationAddBack');
+    expect(dep!.preAnswer).not.toBeNull();
+    expect(dep!.required).toBe(false);
+  });
+
+  it('capitalAllowancesTotal (preAnswer === null, no fixed-asset register) is always required: true', () => {
+    const iv = buildInterview(ETB, { hasPriorReturn: false });
+    const ca = iv.questions.find((q) => q.id === 'capitalAllowancesTotal');
+    expect(ca!.preAnswer).toBeNull();
+    expect(ca!.required).toBe(true);
+  });
+
+  it('a sign-contradiction trigger (preAnswer nulled) is required: true', () => {
+    const iv = buildInterview(
+      [
+        { accountCode: '7900', accountName: 'Unrealised exchange loss', cyBalance: 300, pyBalance: null },
+        { accountCode: '7901', accountName: 'Unrealised exchange gain', cyBalance: -500, pyBalance: null },
+      ],
+      { hasPriorReturn: false }
+    );
+    const fx = iv.questions.find((q) => q.id === 'unrealizedFxAddBack');
+    expect(fx!.preAnswer).toBeNull();
+    expect(fx!.required).toBe(true);
+  });
+
+  it('dividendsExemptPE is always required: true, even with a clean netted pre-answer', () => {
+    const iv = buildInterview(
+      [{ accountCode: '4900', accountName: 'Dividend income', cyBalance: -10000, pyBalance: null }],
+      { hasPriorReturn: false }
+    );
+    const div = iv.questions.find((q) => q.id === 'dividendsExemptPE');
+    expect(div).toBeDefined();
+    // eligibility amount is netted cleanly...
+    expect(div!.preAnswer).toBe(10000);
+    // ...but the participation-exemption anti-abuse test is a legal judgment
+    // call that must never be silently auto-accepted.
+    expect(div!.required).toBe(true);
+  });
+
   it('triggers fines add-back and always asks losses b/f when no prior return', () => {
     const iv = buildInterview(ETB, { hasPriorReturn: false });
     expect(iv.questions.some((q) => q.id === 'finesPenaltiesAddBack')).toBe(true);
