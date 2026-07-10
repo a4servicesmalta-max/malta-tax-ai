@@ -25,6 +25,8 @@ import { applyMapping, netProfitFromMapping, deriveSectionTotals, applyClosingEn
 import { recallMapping, rememberMapping, seedFromRepoIfEmpty } from './mapping-memory';
 import { buildInterview, fillsFromAnswers } from './interview';
 import { computeTax } from './tax-computation';
+import { computeRefund, type RefundCategory } from './refund-computation';
+import { computeNid } from './nid-computation';
 import { reasonablenessReview } from './reasonableness-review';
 import { notifyAdmin } from './email';
 import { fillCfrReturn } from './template-writer';
@@ -634,14 +636,29 @@ export function createApp() {
       // unwritten means either a blank cross-check failure (CfR's own T100 check)
       // on a fresh template, or a stale figure surviving on a reused one — in
       // both cases the wrong number silently reaches the tax computation.
-      // ponytail: standard local trading company assumed — the whole adjusted
-      // profit lands in the Maltese Taxed Account (G99); split across IPA (E99)
-      // /FIA (I99) when a non-MTA profile (foreign-source or property income) is
-      // supported.
+      // The preparer confirms the IPA (Malta immovable property) and FIA
+      // (foreign-source) slices explicitly (propertyIncomeIPA/foreignSourceIncomeFIA
+      // — never silently inferred from the ETB); whatever remains lands in the
+      // Maltese Taxed Account, matching the standard-profile default when both
+      // are 0.
+      const ipa = answers?.['propertyIncomeIPA'] ?? 0;
+      const fia = answers?.['foreignSourceIncomeFIA'] ?? 0;
+      // A loss year has no meaningful split (there is no profit to allocate),
+      // so the over-allocation check only applies when adjustedProfit is a
+      // genuine profit — allocating more than 100% of it would silently
+      // fabricate a wrong split rather than surface the preparer's mistake.
+      if (comp.adjustedProfit >= 0 && ipa + fia > Math.abs(comp.adjustedProfit)) {
+        return res.status(400).json({
+          error:
+            `IPA (€${ipa.toFixed(2)}) + FIA (€${fia.toFixed(2)}) allocation exceeds the adjusted profit ` +
+            `(€${comp.adjustedProfit.toFixed(2)}) available to split across tax accounts on p3 row 99 — reduce the allocation.`,
+        });
+      }
+      const mta = Math.round((comp.adjustedProfit - ipa - fia) * 100) / 100;
       directCells.push(
-        { sheet: 'p3', ref: 'E99', value: 0 },
-        { sheet: 'p3', ref: 'G99', value: comp.adjustedProfit },
-        { sheet: 'p3', ref: 'I99', value: 0 }
+        { sheet: 'p3', ref: 'E99', value: ipa },
+        { sheet: 'p3', ref: 'G99', value: mta },
+        { sheet: 'p3', ref: 'I99', value: fia }
       );
       // Section totals (TOTAL REVENUE/ASSETS/…) are typed inputs on the firm's
       // returns — derive them arithmetically, but ONLY for rows this template
@@ -775,6 +792,29 @@ export function createApp() {
                 `allocation on p3 row 99, then verify the "Sum of fields 37a to 37c" cross-check on p3.`,
             ]
           : [];
+
+      // Shareholder refund working (ITMA Cap. 372 Art. 48(4)/(4A)) — always
+      // computed as a preparer reference, NEVER anchored to the return.
+      // Priority mirrors ITMA's own precedence: DTR claimed on FIA profits
+      // overrides the passive-interest/royalties rate, which overrides a
+      // participating-holding taxed election, which falls back to standard.
+      const refundCategory: RefundCategory =
+        (answers?.['refundDtrClaimed'] ?? 0) === 1
+          ? 'dtrClaimed'
+          : (answers?.['refundPassiveIncome'] ?? 0) === 1
+            ? 'passiveInterestRoyalties'
+            : (answers?.['refundParticipatingHolding100'] ?? 0) === 1
+              ? 'participatingHolding100'
+              : 'standard';
+      const refund = computeRefund(comp.taxCharge, refundCategory);
+
+      // NID working (S.L. 123.176) — computed only when claimed; never
+      // anchored to TRA100 (see nid-computation.ts docstring).
+      const nid =
+        (answers?.['nidClaimed'] ?? 0) === 1
+          ? computeNid(answers?.['nidReferenceRate'] ?? 0, answers?.['nidRiskCapital'] ?? 0, comp.chargeableIncome)
+          : undefined;
+
       const summary = renderComputationSummary({
         clientName: clientName || 'Client',
         yearOfAssessment: yearOfAssessment || '',
@@ -789,6 +829,8 @@ export function createApp() {
           }),
         warnings: [...session.warnings, ...priorReviewWarnings, ...peDividendWarning, ...(tie && !tie.ok ? tie.issues : [])],
         unmatchedCodes: unmatched,
+        refund,
+        nid,
       });
 
       session.output = { xlsx: buffer, summary };

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { renderComputationSummary } from '../src/computation-summary';
 import { computeTax } from '../src/tax-computation';
+import { computeRefund } from '../src/refund-computation';
+import { computeNid } from '../src/nid-computation';
 
 describe('computation summary', () => {
   it('renders the tax computation, adjustments, manual-entry flags and provenance', () => {
@@ -53,5 +55,39 @@ describe('computation summary', () => {
     expect(html).toContain('&lt;script&gt;');
     expect(html).toContain('Evil &amp; Co');
     expect(html).toContain('&amp; Sons');
+  });
+
+  it('omits the refund/NID sections entirely when not supplied', () => {
+    const html = renderComputationSummary({
+      clientName: 'X', yearOfAssessment: 'YA2026', netProfitPerAccounts: 0,
+      computation: computeTax(0, {}), fills: [], mappingRows: [], warnings: [], unmatchedCodes: [],
+    });
+    expect(html).not.toContain('Shareholder refund working');
+    expect(html).not.toContain('Notional Interest Deduction working');
+  });
+
+  it('renders the shareholder refund working, clearly labelled as guidance only', () => {
+    const html = renderComputationSummary({
+      clientName: 'X', yearOfAssessment: 'YA2026', netProfitPerAccounts: 0,
+      computation: computeTax(0, {}), fills: [], mappingRows: [], warnings: [], unmatchedCodes: [],
+      refund: computeRefund(35000, 'dtrClaimed'),
+    });
+    expect(html).toContain('Shareholder refund working (not filed automatically — preparer confirms preconditions and files the claim)');
+    expect(html).toContain('dtrClaimed');
+    expect(html).toContain('23,333.33');
+    expect(html).toMatch(/ITMA \(Cap\. 372\) Art\. 48\(4\)/);
+    expect(html).not.toContain('Notional Interest Deduction working');
+  });
+
+  it('renders the NID working, clearly labelled that TRA100 is manual', () => {
+    const html = renderComputationSummary({
+      clientName: 'X', yearOfAssessment: 'YA2026', netProfitPerAccounts: 0,
+      computation: computeTax(0, {}), fills: [], mappingRows: [], warnings: [], unmatchedCodes: [],
+      nid: computeNid(0.0919, 100000, 50000),
+    });
+    expect(html).toContain('Notional Interest Deduction working (NID) — TRA100 must be completed manually; not auto-filed');
+    expect(html).toContain('9.19%');
+    expect(html).toContain('9,190.00');
+    expect(html).not.toContain('Shareholder refund working');
   });
 });

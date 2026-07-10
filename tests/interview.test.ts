@@ -165,6 +165,59 @@ describe('interview', () => {
     expect(iv.questions.some((q) => q.id === 'generalProvisionsAddBack')).toBe(false);
   });
 
+  it('always asks the IPA/FIA split questions, blank and required, regardless of the ETB', () => {
+    const iv = buildInterview(ETB, { hasPriorReturn: false });
+    const ipa = iv.questions.find((q) => q.id === 'propertyIncomeIPA');
+    const fia = iv.questions.find((q) => q.id === 'foreignSourceIncomeFIA');
+    expect(ipa).toBeDefined();
+    expect(fia).toBeDefined();
+    expect(ipa!.preAnswer).toBeNull();
+    expect(fia!.preAnswer).toBeNull();
+    expect(ipa!.required).toBe(true);
+    expect(fia!.required).toBe(true);
+  });
+
+  it('always asks the refund-category and NID questions, blank; refund flags + nidClaimed required, NID amounts not', () => {
+    const iv = buildInterview(ETB, { hasPriorReturn: false });
+    // The refund yes/no flags and the NID claimed gate are genuine legal
+    // judgment calls (like dividendsExemptPE) — forced every time.
+    for (const id of ['refundDtrClaimed', 'refundPassiveIncome', 'refundParticipatingHolding100', 'nidClaimed']) {
+      const q = iv.questions.find((x) => x.id === id);
+      expect(q, id).toBeDefined();
+      expect(q!.preAnswer, id).toBeNull();
+      expect(q!.required, id).toBe(true);
+    }
+    // nidReferenceRate/nidRiskCapital are pure manual figures with no ETB
+    // grounding, meaningful only when nidClaimed=yes — not forced on every
+    // return (a return with no NID claim would otherwise be blocked by two
+    // irrelevant blank number fields).
+    for (const id of ['nidReferenceRate', 'nidRiskCapital']) {
+      const q = iv.questions.find((x) => x.id === id);
+      expect(q, id).toBeDefined();
+      expect(q!.preAnswer, id).toBeNull();
+      expect(q!.required, id).toBe(false);
+    }
+    expect(iv.questions.find((q) => q.id === 'refundDtrClaimed')!.kind).toBe('yesno');
+    expect(iv.questions.find((q) => q.id === 'nidClaimed')!.kind).toBe('yesno');
+    expect(iv.questions.find((q) => q.id === 'nidReferenceRate')!.kind).toBe('amount');
+  });
+
+  it('fillsFromAnswers routes IPA/FIA amounts to manual-entry fills but skips refund/NID sidecar ids', () => {
+    const fills = fillsFromAnswers({
+      propertyIncomeIPA: 10000,
+      foreignSourceIncomeFIA: 5000,
+      refundDtrClaimed: 1,
+      refundPassiveIncome: 0,
+      refundParticipatingHolding100: 0,
+      nidClaimed: 1,
+      nidReferenceRate: 0.0919,
+      nidRiskCapital: 100000,
+    });
+    expect(fills).toHaveLength(2);
+    for (const f of fills) expect(f.anchorId).toBeNull();
+    expect(fills.map((f) => f.amount).sort((a, b) => a - b)).toEqual([5000, 10000]);
+  });
+
   it('fillsFromAnswers rejects non-finite amounts and unknown ids, keeps 0-skip and negatives', () => {
     expect(() => fillsFromAnswers({ depreciationAddBack: NaN })).toThrow(
       /invalid amount for interview answer "depreciationAddBack"/i

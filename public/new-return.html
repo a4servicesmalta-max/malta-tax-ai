@@ -207,6 +207,14 @@ const LABELS={
   lossesBroughtForward:'Deduct: losses brought forward',
   capitalAllowancesTotal:'Deduct: capital allowances',
   unabsorbedCapitalAllowancesBf:'Deduct: unabsorbed capital allowances b/f',
+  propertyIncomeIPA:'Allocate: Immovable Property Account income',
+  foreignSourceIncomeFIA:'Allocate: Foreign Income Account income',
+  refundDtrClaimed:'Refund working: DTR claimed on FIA profits?',
+  refundPassiveIncome:'Refund working: passive interest/royalties distribution?',
+  refundParticipatingHolding100:'Refund working: participating holding taxed (no exemption)?',
+  nidClaimed:'NID: claimed this year?',
+  nidReferenceRate:'NID: reference rate',
+  nidRiskCapital:'NID: risk capital',
 };
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -329,9 +337,21 @@ function renderMapping(rules){
   $('mapBody').addEventListener('change',invalidate);
 }
 function questionField(q){
-  return `<div>
-      <p style="font-size:14.5px;color:#14161a;font-weight:600;margin:0 0 4px">${esc(q.text)}</p>
-      <p style="font-size:12.5px;color:#8a857c;font-style:italic;margin:0 0 8px">${esc(q.legalBasis||'')}</p>
+  const head=`<p style="font-size:14.5px;color:#14161a;font-weight:600;margin:0 0 4px">${esc(q.text)}</p>
+      <p style="font-size:12.5px;color:#8a857c;font-style:italic;margin:0 0 8px">${esc(q.legalBasis||'')}</p>`;
+  // yesno questions (e.g. refund/NID facts) are not euro amounts — a blank
+  // "Select…" placeholder keeps the same no-silent-default guarantee as a
+  // blank amount input (firstBlankRequired below treats both the same way).
+  if(q.kind==='yesno'){
+    return `<div>${head}
+      <select class="answer mono" data-id="${esc(q.id)}" style="padding:9px 12px;border-radius:9px;border:1px solid #ddd9d2;background:#f6f5f2;font-size:13px;color:#14161a">
+        <option value="" ${q.preAnswer==null?'selected':''}>Select…</option>
+        <option value="1">Yes</option>
+        <option value="0">No</option>
+      </select>
+    </div>`;
+  }
+  return `<div>${head}
       <div style="display:flex;align-items:center;gap:10px">
         <span class="mono" style="color:#8a857c">€</span>
         <input type="number" step="0.01" class="answer mono" data-id="${esc(q.id)}" value="${q.preAnswer==null?'':q.preAnswer}" style="width:160px;padding:9px 12px;border-radius:9px;border:1px solid #ddd9d2;background:#f6f5f2;font-size:13px;color:#14161a">

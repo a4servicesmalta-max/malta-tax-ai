@@ -5,6 +5,8 @@
  */
 import type { InterviewFill } from './domain';
 import type { TaxComputation } from './tax-computation';
+import type { RefundComputation } from './refund-computation';
+import type { NidComputation } from './nid-computation';
 import { filingDeadlineLines } from './filing-deadlines';
 
 export interface SummaryInput {
@@ -17,6 +19,10 @@ export interface SummaryInput {
   mappingRows: Array<{ ledger: string; cfrCode: number; sheet: string; amount: number }>;
   warnings: string[];
   unmatchedCodes: Array<{ sheet: string; cfrCode: number }>;
+  /** Shareholder refund working — guidance only, never anchored to the return. */
+  refund?: RefundComputation;
+  /** NID working — guidance only, never anchored to the return (TRA100 is manual). */
+  nid?: NidComputation;
 }
 
 const eur = (n: number) =>
@@ -51,6 +57,34 @@ export function renderComputationTable(c: TaxComputation): string {
   return `<table class="comp"><tr><th>Item</th><th>Amount €</th></tr>${rows}</table>${
     notes ? `<ul class="notes">${notes}</ul>` : ''
   }`;
+}
+
+/** Shareholder refund working — guidance only; the figure is never written to the return. */
+function renderRefundSection(r: RefundComputation): string {
+  const notes = r.notes.map((n) => `<li>${esc(n)}</li>`).join('\n');
+  return `<h2>Shareholder refund working (not filed automatically — preparer confirms preconditions and files the claim)</h2>
+<table><tr><th>Item</th><th>Value</th></tr>
+<tr><td>Category</td><td>${esc(r.category)}</td></tr>
+<tr><td>Fraction</td><td class="num">${r.fraction.toFixed(4)}</td></tr>
+<tr><td>Tax paid (base)</td><td class="num">${eur(r.taxPaid)}</td></tr>
+<tr><td>Refund amount</td><td class="num">${eur(r.refundAmount)}</td></tr>
+</table>
+<ul class="notes">${notes}</ul>`;
+}
+
+/** NID working — guidance only; TRA100 must be completed manually, no figure is auto-filed. */
+function renderNidSection(n: NidComputation): string {
+  const notes = n.notes.map((x) => `<li>${esc(x)}</li>`).join('\n');
+  return `<h2>Notional Interest Deduction working (NID) — TRA100 must be completed manually; not auto-filed</h2>
+<table><tr><th>Item</th><th>Value</th></tr>
+<tr><td>Reference rate</td><td class="num">${(n.referenceRate * 100).toFixed(2)}%</td></tr>
+<tr><td>Risk capital</td><td class="num">${eur(n.riskCapital)}</td></tr>
+<tr><td>Gross deduction</td><td class="num">${eur(n.grossDeduction)}</td></tr>
+<tr><td>Cap (90% of chargeable income before NID)</td><td class="num">${eur(n.cap)}</td></tr>
+<tr><td>Allowed deduction</td><td class="num">${eur(n.allowedDeduction)}</td></tr>
+<tr><td>Carried forward</td><td class="num">${eur(n.carriedForward)}</td></tr>
+</table>
+<ul class="notes">${notes}</ul>`;
 }
 
 export function renderComputationSummary(input: SummaryInput): string {
@@ -92,5 +126,7 @@ ${deadlines ? `<h2>Filing deadlines (Year of Assessment ${esc(input.yearOfAssess
 <h2>Account mapping (provenance)</h2>
 <table><tr><th>Ledger account</th><th>Sheet</th><th>CfR code</th><th>Amount €</th></tr>${map}</table>
 ${warn ? `<h2>Warnings</h2><div class="warn"><ul>${warn}</ul></div>` : ''}
+${input.refund ? renderRefundSection(input.refund) : ''}
+${input.nid ? renderNidSection(input.nid) : ''}
 </body></html>`;
 }

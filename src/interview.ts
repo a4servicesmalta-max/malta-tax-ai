@@ -184,6 +184,103 @@ export function buildInterview(etb: EtbAccount[], ctx: InterviewContext): Interv
     triggeredBy: [],
     required: true,
   });
+  // IPA/FIA split of adjusted profit (p3 row 99, fields 37a/37c). The amount
+  // CAN be netted from the ETB in principle, but classifying income as
+  // Malta-immovable-property or foreign-source is a legal judgment (like
+  // dividendsExemptPE above) — no trigger-based pre-answer, always asked,
+  // always required so the split is never silently defaulted to "all MTA".
+  questions.push({
+    id: 'propertyIncomeIPA',
+    text: 'Amount of the adjusted profit that is Malta immovable-property income (rental profit, property dealing) to be allocated to the Immovable Property Account. Confirm 0 if none.',
+    legalBasis:
+      'Cap. 123 — profit from immovable property situated in Malta is allocated to the Immovable Property Account (IPA) rather than the Maltese Taxed Account; the p3 row 99 (fields 37a–c) split is a legal classification, not an ETB-derivable figure.',
+    kind: 'amount',
+    preAnswer: null,
+    triggeredBy: [],
+    required: true,
+  });
+  questions.push({
+    id: 'foreignSourceIncomeFIA',
+    text: 'Amount of the adjusted profit that is foreign-source income (interest, royalties, or other income not Malta-sourced) to be allocated to the Foreign Income Account. Confirm 0 if none.',
+    legalBasis:
+      'Cap. 123 — foreign-source income not exempted under the participation exemption is allocated to the Foreign Income Account (FIA); classifying "foreign vs Malta source" from ETB account names alone is not reliable enough to auto-fill silently.',
+    kind: 'amount',
+    preAnswer: null,
+    triggeredBy: [],
+    required: true,
+  });
+  // Shareholder refund category flags (ITMA Cap. 372 Art. 48(4)/(4A)) — a
+  // preparer's working only, never anchored to the return (see
+  // refund-computation.ts). Priority order applied in server.ts: DTR claimed
+  // > passive interest/royalties > participating holding taxed > standard.
+  questions.push({
+    id: 'refundDtrClaimed',
+    text: 'Was double-tax relief (DTR) claimed on the FIA profits being distributed?',
+    legalBasis:
+      'ITMA (Cap. 372) Art. 48(4)/(4A) — a 2/3 shareholder refund applies whenever any double-tax relief was claimed on the FIA profits underlying the distribution, taking priority over the passive-income 5/7 rate.',
+    kind: 'yesno',
+    preAnswer: null,
+    triggeredBy: [],
+    required: true,
+  });
+  questions.push({
+    id: 'refundPassiveIncome',
+    text: 'Is this a distribution of passive interest or royalties (foreign tax suffered under 5%, not trade-derived)?',
+    legalBasis:
+      'ITMA (Cap. 372) Art. 48(4)(a) — passive interest/royalties suffering foreign tax below 5% and not trade-derived attract a 5/7 refund instead of the standard 6/7.',
+    kind: 'yesno',
+    preAnswer: null,
+    triggeredBy: [],
+    required: true,
+  });
+  questions.push({
+    id: 'refundParticipatingHolding100',
+    text: 'Is this a distribution of participating-holding profits where the company elected to TAX them (not claim the participation exemption)?',
+    legalBasis:
+      'Cap. 123 Art. 12(1)(u) / ITMA Art. 48(4A) — a company may elect to tax participating-holding profits instead of claiming the participation exemption, in which case a 100% shareholder refund applies on distribution.',
+    kind: 'yesno',
+    preAnswer: null,
+    triggeredBy: [],
+    required: true,
+  });
+  // Notional Interest Deduction (S.L. 123.176) working inputs — computed but
+  // never anchored into the return's TRA100 schedule (see nid-computation.ts).
+  questions.push({
+    id: 'nidClaimed',
+    text: 'Is a Notional Interest Deduction (NID) being claimed for this year?',
+    legalBasis:
+      'S.L. 123.176 (Notional Interest Deduction Rules) — requires the approval of ALL shareholders of the company for the year of claim, which is not a computable fact.',
+    kind: 'yesno',
+    preAnswer: null,
+    triggeredBy: [],
+    required: true,
+  });
+  questions.push({
+    id: 'nidReferenceRate',
+    text: 'NID reference rate for the year (e.g. 0.0919 for 9.19%), as published by the Central Bank of Malta. Confirm 0 if NID is not being claimed this year.',
+    legalBasis:
+      'S.L. 123.176 rule 3 — the reference rate (risk-free government bond yield plus a premium, minimum 5%) is published annually and changes every year; it must never be hardcoded.',
+    kind: 'amount',
+    preAnswer: null,
+    triggeredBy: [],
+    // Unlike propertyIncomeIPA/foreignSourceIncomeFIA/dividendsExemptPE, this
+    // is not a judgment call netted from real ETB activity — it's a pure
+    // manual figure meaningful only when nidClaimed=yes (gated separately, and
+    // itself required). Forcing it on every return would block the common
+    // case (no NID claim) for a field with no bearing on the outcome.
+    required: false,
+  });
+  questions.push({
+    id: 'nidRiskCapital',
+    text: 'Risk capital for the NID computation (balance-sheet equity per S.L. 123.176 rule 4, adjusted per the Rules). Confirm 0 if NID is not being claimed this year.',
+    legalBasis:
+      'S.L. 123.176 rule 4 — risk capital is derived from the balance sheet (share capital, share premium, positive retained earnings, interest-free loans, etc.); not reliably inferable from the ETB mapping in this app version.',
+    kind: 'amount',
+    preAnswer: null,
+    triggeredBy: [],
+    // See nidReferenceRate above — same reasoning.
+    required: false,
+  });
   return { questions };
 }
 
@@ -198,7 +295,33 @@ export const LABELS: Record<string, string> = {
   lossesBroughtForward: 'Deduct: losses brought forward',
   capitalAllowancesTotal: 'Deduct: capital allowances',
   unabsorbedCapitalAllowancesBf: 'Deduct: unabsorbed capital allowances b/f',
+  propertyIncomeIPA: 'Allocate: Immovable Property Account income',
+  foreignSourceIncomeFIA: 'Allocate: Foreign Income Account income',
+  refundDtrClaimed: 'Refund working: DTR claimed on FIA profits?',
+  refundPassiveIncome: 'Refund working: passive interest/royalties distribution?',
+  refundParticipatingHolding100: 'Refund working: participating holding taxed (no exemption)?',
+  nidClaimed: 'NID: claimed this year?',
+  nidReferenceRate: 'NID: reference rate',
+  nidRiskCapital: 'NID: risk capital',
 };
+
+/**
+ * Ids that never anchor to a return cell and are consumed directly by a
+ * dedicated computation (shareholder refund working, NID working — see
+ * refund-computation.ts / nid-computation.ts) rather than the generic
+ * tax-adjustments funnel. Routing them through fillsFromAnswers would
+ * produce a spurious "manual entry" adjustment row on the computation
+ * summary (e.g. a yes/no flag rendered as "€1.00"), so they are skipped here
+ * — server.ts reads them straight off the confirmed answers instead.
+ */
+const NON_FILL_IDS = new Set([
+  'refundDtrClaimed',
+  'refundPassiveIncome',
+  'refundParticipatingHolding100',
+  'nidClaimed',
+  'nidReferenceRate',
+  'nidRiskCapital',
+]);
 
 /**
  * Confirmed answers -> deterministic fills. Deliberate zero answers produce
@@ -214,6 +337,7 @@ export function fillsFromAnswers(answers: Record<string, number>): InterviewFill
     if (typeof amount !== 'number' || !Number.isFinite(amount)) {
       throw new Error(`Invalid amount for interview answer "${id}".`);
     }
+    if (NON_FILL_IDS.has(id)) continue;
     if (amount === 0) continue;
     const anchor = ANCHORS[id] ?? null;
     fills.push({ anchorId: anchor ? id : null, amount, label: LABELS[id] });

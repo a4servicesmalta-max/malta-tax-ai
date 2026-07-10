@@ -290,6 +290,93 @@ describe('server', () => {
     expect(summary.text).not.toContain('Mystery suspense');
   });
 
+  // p3 row 99 (fields 37a/37b/37c): IPA/MTA/FIA split of adjusted profit.
+  describe('IPA/FIA tax-account split (p3 row 99)', () => {
+    async function generateWithAnswers(answers: Record<string, number>) {
+      const app = createApp();
+      const { etb, template } = await fixtures();
+      const s = await request(app)
+        .post('/api/session')
+        .attach('etb', etb, 'etb.xlsx')
+        .attach('template', template, 'template.xlsx');
+      const rules = [
+        { ledgerCode: '1200', cfrCode: 2150, sheet: 'B_Sheet' },
+        { ledgerCode: '4000', cfrCode: 5000, sheet: 'Income' },
+      ];
+      const gen = await request(app)
+        .post(`/api/session/${s.body.sessionId}/generate`)
+        .send({ rules, answers, clientName: 'X', yearOfAssessment: 'YA2026', excluded: [] });
+      return gen;
+    }
+
+    async function p3Xml(app: ReturnType<typeof createApp>, sessionId: string) {
+      const xlsx = await request(app)
+        .get(`/api/session/${sessionId}/return.xlsx`)
+        .buffer(true)
+        .parse((res, cb) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk: Buffer) => chunks.push(chunk));
+          res.on('end', () => cb(null, Buffer.concat(chunks)));
+        });
+      const zip = await JSZip.loadAsync(xlsx.body);
+      return zip.file('xl/worksheets/sheet3.xml')!.async('string'); // p3 is sheet3 per workbook.xml order
+    }
+
+    it('defaults to 100% Maltese Taxed Account when ipa/fia are unanswered (regression)', async () => {
+      const app = createApp();
+      const { etb, template } = await fixtures();
+      const s = await request(app)
+        .post('/api/session')
+        .attach('etb', etb, 'etb.xlsx')
+        .attach('template', template, 'template.xlsx');
+      const rules = [
+        { ledgerCode: '1200', cfrCode: 2150, sheet: 'B_Sheet' },
+        { ledgerCode: '4000', cfrCode: 5000, sheet: 'Income' },
+      ];
+      const gen = await request(app)
+        .post(`/api/session/${s.body.sessionId}/generate`)
+        .send({ rules, answers: {}, clientName: 'X', yearOfAssessment: 'YA2026', excluded: [] });
+      expect(gen.status).toBe(200);
+      const sheet = await p3Xml(app, s.body.sessionId);
+      expect(sheet).toContain('<c r="E99"><v>0</v></c>');
+      expect(sheet).toContain('<c r="G99"><v>80000</v></c>');
+      expect(sheet).toContain('<c r="I99"><v>0</v></c>');
+    });
+
+    it('a nonzero FIA amount reduces MTA and increases FIA by exactly that amount, summing to adjustedProfit', async () => {
+      const app = createApp();
+      const { etb, template } = await fixtures();
+      const s = await request(app)
+        .post('/api/session')
+        .attach('etb', etb, 'etb.xlsx')
+        .attach('template', template, 'template.xlsx');
+      const rules = [
+        { ledgerCode: '1200', cfrCode: 2150, sheet: 'B_Sheet' },
+        { ledgerCode: '4000', cfrCode: 5000, sheet: 'Income' },
+      ];
+      const gen = await request(app)
+        .post(`/api/session/${s.body.sessionId}/generate`)
+        .send({
+          rules,
+          answers: { foreignSourceIncomeFIA: 20000 },
+          clientName: 'X',
+          yearOfAssessment: 'YA2026',
+          excluded: [],
+        });
+      expect(gen.status).toBe(200);
+      const sheet = await p3Xml(app, s.body.sessionId);
+      expect(sheet).toContain('<c r="E99"><v>0</v></c>');
+      expect(sheet).toContain('<c r="G99"><v>60000</v></c>'); // 80000 - 20000
+      expect(sheet).toContain('<c r="I99"><v>20000</v></c>');
+    });
+
+    it('rejects an ipa+fia allocation exceeding the adjusted profit with a 400', async () => {
+      const res = await generateWithAnswers({ propertyIncomeIPA: 50000, foreignSourceIncomeFIA: 40000 }); // 90000 > 80000
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/exceeds the adjusted profit/i);
+    });
+  });
+
   // The FS tie-check's totalAssets proxy must count only asset-class codes
   // (sub-3000) with signs netting — a positive amount on an equity code (3801)
   // must NOT be counted as an asset.
