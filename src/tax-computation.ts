@@ -5,10 +5,14 @@
  * authoritative computation; this is the standard practice working that the
  * preparer reviews first and files alongside the return.
  *
- * ponytail: standard trading company at the 35% flat rate. Refunds (6/7 etc.),
- * NID, multi-tax-account allocation and the unabsorbed-capital-allowance vs
- * trade-loss carry-forward split are NOT modelled here — the template computes
- * those; extend when non-standard profiles are supported.
+ * ponytail: standard trading company at the 35% flat rate, single entity (not
+ * a fiscal unit / consolidated group under S.L. 123.189 — those file a single
+ * consolidated return with a materially different computation and are out of
+ * scope entirely). Refunds (refund-computation.ts), NID (nid-computation.ts)
+ * and the IPA/FIA/MTA split (server.ts, p3 row 99) are modelled as separate
+ * working papers layered on top of this core computation, not folded into it.
+ * The unabsorbed-capital-allowance vs trade-loss carry-forward split is NOT
+ * modelled here — the template computes that; extend if needed.
  */
 import { LABELS } from './interview';
 

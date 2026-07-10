@@ -72,9 +72,21 @@ KNOWN MALTA PITFALLS — check each applicable item against the accounts/computa
   shareholders — flag if a NID-shaped deduction appears without these markers being addressed.
 - Group relief: only CURRENT-year losses, coterminous accounting periods, membership throughout the basis
   year, and the >50% × 3 tests (votes/profits/assets).
+- Double tax relief (DTR): treaty relief, unilateral relief and Commonwealth relief are each claimed
+  independently per source of income — never combine two methods on the SAME income. Flat-Rate Foreign Tax
+  Credit (FRFTC) is only available on FIA-allocated foreign income with no underlying treaty/unilateral
+  relief claimed on it: gross up by 25%, credit capped at 85% of the Malta tax on that FIA income — flag
+  foreign income with no DTR method identified, or more than one method claimed on the same item. Any DTR
+  claimed on FIA profits later distributed drops the shareholder refund fraction to 2/3 (see the refund
+  working) — flag if this consequence isn't reflected in refund advice.
 - Final-tax income (15% withheld investment income, Art. 5A property transfer proceeds, 15% rental option)
   must be EXCLUDED from chargeable income — flag if such income appears to sit in the P&L feeding the
   computation.
+- Fiscal units (S.L. 123.189 consolidated group): if the accounts show investment-in-subsidiary balances
+  suggesting >=95% ownership of another Malta company, or intercompany balances consistent with group
+  membership, flag it as a warning — a fiscal unit files ONE consolidated return for the whole group with a
+  materially different computation (upfront tax in lieu of refunds); THIS APP DOES NOT SUPPORT fiscal-unit
+  computations and this return must not be treated as adequate for a group member.
 
 When STATUTE excerpts from the Income Tax Act (Cap. 123) are provided, ground each point in the Act and
 cite the article (e.g. "Art. 14(1)(a)") where relevant — do not cite provisions that are not in the excerpts
