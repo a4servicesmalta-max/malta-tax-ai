@@ -15,6 +15,14 @@ export interface CfrValue {
   value: number | null;
   /** True when the value cell holds a formula — a template-computed row, not preparer input. */
   computed?: boolean;
+  /**
+   * The formula body when the value cell holds one ('' for a shared-formula
+   * continuation cell, which carries no body of its own). Lets callers tell a
+   * template AGGREGATE (=SUM over same-sheet cells) from preparer/template
+   * DATA that merely happens to be a formula (constant arithmetic like
+   * =65000+1255, or a cross-sheet feed like ='p4'!E10) — seen on real filings.
+   */
+  formula?: string;
 }
 
 function attr(tag: string, name: string): string | undefined {
@@ -88,7 +96,12 @@ export async function readCfrValues(workbook: Buffer, sheets: string[]): Promise
       );
       const em = xml.match(eRe);
       const value = em && !isNonNumericCell(em[1]) ? parseFloat(em[3]) : null;
-      out.push({ sheet, cfrCode, row, value, ...(em && em[2] ? { computed: true } : {}) });
+      let formula: string | undefined;
+      if (em && em[2]) {
+        const body = em[2].match(/>([^<]*)<\/(?:\w+:)?f>$/);
+        formula = body ? body[1] : '';
+      }
+      out.push({ sheet, cfrCode, row, value, ...(formula !== undefined ? { computed: true, formula } : {}) });
     }
   }
   return out;

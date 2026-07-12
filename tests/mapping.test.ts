@@ -51,3 +51,20 @@ describe('mapping', () => {
     expect(fill.codeCells).toEqual([{ sheet: 'B_Sheet', cfrCode: 2150, amount: 5000 }]);
   });
 });
+
+// Regression (2026-07-12 test round): an ETB tax-charge account mapped to Income
+// code 7060 flowed into E6, making "net profit before tax" an AFTER-tax figure
+// (real client: E6 understated by exactly the €290,758 tax charge).
+import { netProfitFromMapping as _npbt } from '../src/mapping';
+describe('netProfitFromMapping below-the-line exclusion', () => {
+  it('excludes the 7060 tax row (and any code >= 7050) from E6', () => {
+    const fill = {
+      codeCells: [
+        { sheet: 'Income' as const, cfrCode: 5000, amount: -100000 },
+        { sheet: 'Income' as const, cfrCode: 6173, amount: 20000 },
+        { sheet: 'Income' as const, cfrCode: 7060, amount: 28000 },
+      ],
+    };
+    expect(_npbt(fill)).toBe(80000); // before tax — NOT 52,000
+  });
+});

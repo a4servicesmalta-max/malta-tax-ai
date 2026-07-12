@@ -221,7 +221,12 @@ const LIFT_REGIONS: Array<{ sheet: string; rows: [number, number]; cols: string[
   { sheet: 'p1', rows: [44, 60], cols: ['N'], note: 'p1 company details (MBR no., activity, registered address)' },
   { sheet: 'Income', rows: [8, 8], cols: ['E'], note: 'Income: principal activity description' },
   { sheet: 'p7', rows: [8, 92], cols: ['B', 'D', 'F', 'I', 'M', 'O'], upper: true, note: 'p7 shareholder register' },
+  // Country cells are lifted verbatim (no uppercasing): the blank template pre-fills
+  // 'Malta' here and its dropdown validation uses mixed-case country names — without
+  // this lift a Polish/Cypriot shareholder silently ships as resident in Malta.
+  { sheet: 'p7', rows: [8, 92], cols: ['E'], note: 'p7 shareholder register: country of residence' },
   { sheet: 'p7', rows: [93, 130], cols: ['B', 'K', 'N', 'Q'], upper: true, note: 'p7 shareholder addresses' },
+  { sheet: 'p7', rows: [93, 130], cols: ['D'], note: 'p7 shareholder addresses: country' },
   { sheet: 'p8', rows: [37, 37], cols: ['A'], upper: true, note: 'p8 declaration signatory' },
   { sheet: 'p8', rows: [43, 45], cols: ['A'], upper: true, note: 'p8 legal representative' },
 ];

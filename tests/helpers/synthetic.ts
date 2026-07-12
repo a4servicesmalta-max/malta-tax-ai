@@ -60,7 +60,7 @@ function sheetXml(rows: SyntheticRow[], p = ''): string {
         `<${p}row r="${r.row}"><${p}c r="C${r.row}"${r.codeT ? ` t="${r.codeT}"` : ''}><${p}v>${r.code}</${p}v></${p}c>` +
         `<${p}c r="D${r.row}"><${p}f>${r.formula ?? `SUM(E${r.row})`}</${p}f><${p}v>0</${p}v></${p}c>` +
         (r.value !== undefined
-          ? `<${p}c r="E${r.row}"${r.valueT ? ` t="${r.valueT}"` : ''}><${p}v>${r.value}</${p}v></${p}c>`
+          ? `<${p}c r="E${r.row}"${r.valueT ? ` t="${r.valueT}"` : ''}>${r.eFormula !== undefined ? `<${p}f>${r.eFormula}</${p}f>` : ''}<${p}v>${r.value}</${p}v></${p}c>`
           : '') +
         `</${p}row>`
     )
@@ -81,6 +81,8 @@ export interface SyntheticRow {
   valueT?: string;
   /** Override the D-cell formula (default `SUM(E{row})`). */
   formula?: string;
+  /** Put a formula on the E VALUE cell itself (template aggregate / preparer-typed arithmetic). */
+  eFormula?: string;
 }
 
 /** Build a minimal CfR-like workbook. p3 gets a bare E6 row for the net-profit direct write. */

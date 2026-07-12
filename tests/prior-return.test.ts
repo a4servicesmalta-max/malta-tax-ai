@@ -258,3 +258,51 @@ describe('prior-return', () => {
     expect(review.convention).toBe('unknown');
   });
 });
+
+// --- Regressions from the 2026-07-12 pre-ship test round (6 real filed returns) ---
+import { syntheticCfrWorkbook as _wb } from './helpers/synthetic';
+import { reviewPriorReturn as _review } from '../src/prior-return';
+
+describe('prior-review row classification (real-filing shapes)', () => {
+  it('ignores the year cell (code 31) — a balanced signed return must not "net" to the year', async () => {
+    const buf = await _wb({
+      bSheet: [
+        { row: 9, code: 31, value: 2022, eFormula: "'p1'!D8" }, // year metadata cell
+        { row: 20, code: 2150, value: 5000 },
+        { row: 30, code: 3801, value: -5000 },
+      ],
+      income: [],
+    });
+    const r = await _review(buf);
+    expect(r.convention).toBe('signed');
+    expect(r.findings.filter((f) => f.severity === 'error')).toHaveLength(0);
+  });
+
+  it('excludes template aggregates (same-sheet SUM) but keeps preparer calculator formulas and cross-sheet feeds', async () => {
+    const buf = await _wb({
+      bSheet: [
+        { row: 20, code: 2150, value: 5000 },
+        { row: 25, code: 2200, value: 600, eFormula: '500+100' }, // preparer-typed arithmetic = DATA
+        { row: 28, code: 2052, value: 400, eFormula: "'p4'!E10" }, // schedule-fed row = DATA
+        { row: 40, code: 2299, value: 6000, eFormula: 'SUM(E20:E39)' }, // template aggregate
+        { row: 50, code: 3801, value: -6000 },
+      ],
+      income: [],
+    });
+    const r = await _review(buf);
+    expect(r.convention).toBe('signed');
+    expect(r.findings.filter((f) => f.severity === 'error')).toHaveLength(0);
+  });
+
+  it('still flags a genuinely unbalanced return', async () => {
+    const buf = await _wb({
+      bSheet: [
+        { row: 20, code: 2150, value: 5000 },
+        { row: 30, code: 3801, value: -3500 },
+      ],
+      income: [],
+    });
+    const r = await _review(buf);
+    expect(r.findings.some((f) => f.severity === 'error' && /does not balance/.test(f.message))).toBe(true);
+  });
+});

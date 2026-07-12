@@ -24,9 +24,45 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/** The year cell on B_Sheet carries CfR code 31 — metadata, never a monetary amount. */
+const YEAR_CODE = 31;
+
+/**
+ * True when a value-cell formula marks a template AGGREGATE row (a subtotal
+ * over other cells on the same sheet) rather than data. Classification is by
+ * formula CONTENT, verified against real filings across template vintages:
+ *  - same-sheet cell references (=SUM(E10:E20), =E10+E15) → aggregate;
+ *  - cross-sheet references ('p4'!E10 — the template feeding a data row from a
+ *    schedule page) → data;
+ *  - constant arithmetic (=65000+1255 — a preparer using the cell as a
+ *    calculator, seen on a real filed return) → data;
+ *  - a shared-formula continuation cell (no body of its own) → aggregate.
+ * The filed file's mere `computed` flag is NOT a safe signal either way.
+ */
+function isAggregateFormula(v: CfrValue): boolean {
+  if (v.formula === undefined) return false; // literal value → data
+  if (v.formula === '') return true; // shared-formula continuation → aggregate
+  if (v.formula.includes('!')) return false; // cross-sheet feed → data
+  return /[A-Z]{1,3}\$?\d{1,5}/.test(v.formula); // same-sheet refs → aggregate
+}
+
+/**
+ * Monetary data rows of a filed return: excludes the year cell (CfR code 31 —
+ * without this a perfectly balanced signed return "nets" to the year, e.g.
+ * €2,022) and template-aggregate rows per isAggregateFormula. Totals that were
+ * TYPED OVER as literals are deliberately kept: on a signed return the typed
+ * asset/equity totals cancel, and any residual is a genuine internal
+ * inconsistency this review exists to flag.
+ */
+function dataRows(values: CfrValue[], sheet: string): CfrValue[] {
+  return values.filter(
+    (v) => v.sheet === sheet && v.value !== null && v.cfrCode !== YEAR_CODE && !isAggregateFormula(v)
+  );
+}
+
 /** Detect the sign convention of a filed return's B_Sheet values. */
 function detectConvention(values: CfrValue[]): { convention: PriorReturnConvention; balanceSheetNet: number } {
-  const bs = values.filter((v) => v.sheet === 'B_Sheet' && v.value !== null);
+  const bs = dataRows(values, 'B_Sheet');
   const balanceSheetNet = round2(bs.reduce((a, v) => a + (v.value as number), 0));
   if (bs.length === 0) return { convention: 'unknown', balanceSheetNet };
   if (Math.abs(balanceSheetNet) <= 1) return { convention: 'signed', balanceSheetNet };
@@ -262,8 +298,8 @@ export async function reviewPriorReturn(buffer: Buffer): Promise<PriorReturnRevi
     };
   }
   const findings: PriorReviewFinding[] = [];
-  const bs = values.filter((v) => v.sheet === 'B_Sheet' && v.value !== null);
-  const inc = values.filter((v) => v.sheet === 'Income' && v.value !== null);
+  const bs = dataRows(values, 'B_Sheet');
+  const inc = dataRows(values, 'Income');
   const { convention, balanceSheetNet } = detectConvention(values);
   const impliedNetProfit =
     convention === 'signed' ? round2(-inc.reduce((a, v) => a + (v.value as number), 0)) : null;
@@ -301,10 +337,22 @@ export async function reviewPriorReturn(buffer: Buffer): Promise<PriorReturnRevi
     },
   ];
   for (const t of totalsChecks) {
-    const total = values.find((v) => v.sheet === t.sheet && v.cfrCode === t.code && v.computed && v.value !== null);
+    // A filed total row is normally a template formula (computed), but a return
+    // whose totals were TYPED OVER as literals is precisely the hand-edited case
+    // this check exists for — when the blank-template map identifies the row as
+    // an aggregate, accept it either way.
+    const total = values.find(
+      (v) =>
+        v.sheet === t.sheet &&
+        v.cfrCode === t.code &&
+        v.value !== null &&
+        (v.computed || true) // total row accepted computed OR typed-over — the code itself names it
+    );
     if (!total) continue;
     const sum = round2(
-      values.filter((v) => !v.computed && v.value !== null && t.inputs(v)).reduce((a, v) => a + (v.value as number), 0)
+      dataRows(values, t.sheet)
+        .filter((v) => t.inputs(v) && v.cfrCode !== t.code)
+        .reduce((a, v) => a + (v.value as number), 0)
     );
     if (Math.abs(Math.abs(total.value as number) - Math.abs(sum)) > 1) {
       findings.push({

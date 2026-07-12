@@ -31,10 +31,18 @@ function matchRule(acc: EtbAccount, rules: MappingRule[]): MappingRule | undefin
   return rules.find((r) => r.ledgerNameMatch && name.includes(r.ledgerNameMatch.toLowerCase()));
 }
 
-/** Net profit derived from lines mapped to Income (income Cr/−, expenses Dr/+). */
+/**
+ * Income-sheet codes at or below the "NET INCOME BEFORE TAX" line (7050): the
+ * tax charge (7060+) and the retained-earnings appropriation rows (7501/7600).
+ * p3!E6 is net profit BEFORE tax — an ETB tax-charge account mapped to 7060
+ * must still be written on its row, but must never flow into E6.
+ */
+const BELOW_THE_LINE_INCOME_CODE = 7050;
+
+/** Net profit BEFORE TAX derived from lines mapped to Income (income Cr/−, expenses Dr/+). */
 export function netProfitFromMapping(fill: Pick<MappedFill, 'codeCells'>): number {
   const plSum = fill.codeCells
-    .filter((c) => c.sheet === 'Income')
+    .filter((c) => c.sheet === 'Income' && c.cfrCode < BELOW_THE_LINE_INCOME_CODE)
     .reduce((acc, c) => acc + c.amount, 0);
   return round2(-plSum);
 }
