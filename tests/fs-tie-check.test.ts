@@ -1,7 +1,35 @@
 import { describe, it, expect } from 'vitest';
 import * as XLSX from 'xlsx';
-import { extractFsFigures, tieCheck } from '../src/fs-tie-check';
+import { extractFsFigures, tieCheck, extractApprovalDate, extractFiguresFromText } from '../src/fs-tie-check';
 import { syntheticEtbXlsx } from './helpers/synthetic';
+
+describe('extractApprovalDate', () => {
+  it('takes the board-approval date, not an embedded accounting year-end', () => {
+    // Regression: the sentence carries BOTH the period-end and the approval date.
+    expect(
+      extractApprovalDate(
+        'The financial statements were approved by the board for the year ended 31 December 2024 on 27 October 2025 and signed.'
+      )
+    ).toBe('2025-10-27');
+  });
+  it('reads the canonical "authorised for issue ... on 27th October 2025" phrasing', () => {
+    expect(
+      extractApprovalDate('approved and authorised for issue by the board of directors on 27th October 2025 and were signed by')
+    ).toBe('2025-10-27');
+  });
+  it('reads a numeric approval date', () => {
+    expect(extractApprovalDate('signed on 05/11/2025')).toBe('2025-11-05');
+  });
+});
+
+describe('FS net-profit label', () => {
+  it('prefers "profit before tax" over "profit for the year" (ties to field 1a)', () => {
+    // Field 1a (p3!E6) is net profit BEFORE tax, so the before-tax FS figure is
+    // the correct comparand — the after-tax line differs by the tax charge.
+    const fig = extractFiguresFromText('Profit before tax 100000\nTax 35000\nProfit for the year 65000');
+    expect(fig.netProfit).toBe(100000);
+  });
+});
 
 function multiSheetXlsx(sheets: Array<{ name: string; rows: (string | number | null)[][] }>): Buffer {
   const wb = XLSX.utils.book_new();

@@ -41,10 +41,10 @@ export interface MappingMemory {
  * live CEE upload returned recalledFrom=null while the same commit locally
  * recognised the client). Never overwrites learned production data.
  */
-export function seedFromRepoIfEmpty(): void {
+export function seedFromRepoIfEmpty(sourcePath?: string): void {
   try {
     if (fs.existsSync(FILE)) return;
-    const repoCopy = path.join(process.cwd(), 'data', 'mappings.json');
+    const repoCopy = sourcePath ?? path.join(process.cwd(), 'data', 'mappings.json');
     if (repoCopy === FILE || !fs.existsSync(repoCopy)) return;
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.copyFileSync(repoCopy, FILE);

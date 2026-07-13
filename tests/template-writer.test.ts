@@ -1,7 +1,35 @@
 import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
-import { fillCfrReturn } from '../src/template-writer';
+import { fillCfrReturn, setFullCalcOnLoad } from '../src/template-writer';
 import { syntheticCfrWorkbook } from './helpers/synthetic';
+
+describe('setFullCalcOnLoad', () => {
+  // Every serialization must end with fullCalcOnLoad="1" — missing it leaves the
+  // produced return showing the template's stale cached zeros for every formula.
+  it('injects into a self-closing <calcPr .../>', () => {
+    expect(setFullCalcOnLoad('<workbook><sheets></sheets><calcPr calcId="1"/></workbook>')).toContain(
+      'fullCalcOnLoad="1"'
+    );
+  });
+  it('injects into a paired/open <calcPr ...> (regression: used to no-op)', () => {
+    const out = setFullCalcOnLoad('<workbook><sheets></sheets><calcPr calcId="1"></calcPr></workbook>');
+    expect(out).toContain('fullCalcOnLoad="1"');
+    expect(out).not.toContain('/ fullCalcOnLoad'); // must not mangle the tag
+  });
+  it('flips an existing fullCalcOnLoad="0" to "1"', () => {
+    expect(setFullCalcOnLoad('<workbook><calcPr fullCalcOnLoad="0"/></workbook>')).toContain(
+      'fullCalcOnLoad="1"'
+    );
+  });
+  it('adds a calcPr when none exists', () => {
+    expect(setFullCalcOnLoad('<workbook><sheets></sheets></workbook>')).toContain('fullCalcOnLoad="1"');
+  });
+  it('handles x:-prefixed elements', () => {
+    expect(setFullCalcOnLoad('<x:workbook><x:sheets></x:sheets><x:calcPr calcId="1"></x:calcPr></x:workbook>')).toContain(
+      'fullCalcOnLoad="1"'
+    );
+  });
+});
 
 describe('fillCfrReturn', () => {
   it('writes amounts into column E of the row matching each CfR code', async () => {

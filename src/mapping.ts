@@ -256,6 +256,14 @@ export const TOTAL_CODE_KEYS = new Set([
 export function applyClosingEntry(codeCells: CfrCodeCell[], templateKeys: Set<string>): CfrCodeCell[] {
   const bsSum = codeCells.filter((c) => c.sheet === 'B_Sheet').reduce((a, c) => a + c.amount, 0);
   const incSum = codeCells.filter((c) => c.sheet === 'Income').reduce((a, c) => a + c.amount, 0);
+  // 7050 is the "NET INCOME BEFORE TAX" row — it must EXCLUDE the below-the-line
+  // tax charge (7060+) and RE appropriation rows, exactly like netProfitFromMapping.
+  // Summing every Income line (incSum) instead would write it net of tax, wrong by
+  // the tax charge whenever an ETB books its tax to a 7060+ code. (incSum stays the
+  // full after-tax movement — that IS what rolls into retained earnings / 3905.)
+  const incBeforeTax = codeCells
+    .filter((c) => c.sheet === 'Income' && c.cfrCode < BELOW_THE_LINE_INCOME_CODE)
+    .reduce((a, c) => a + c.amount, 0);
   // Post-closing signature: B_Sheet balances on its own (closing RE already
   // absorbs the year's result) while the P&L lines are still stated — the
   // firm's "ETB for tax" workflow (verified on Northwind YA2024: filed 7501
@@ -278,7 +286,7 @@ export function applyClosingEntry(codeCells: CfrCodeCell[], templateKeys: Set<st
     // (verified on Northwind YA2024). Derived+best-effort: on a template
     // whose 7050 self-computes the write is skipped/overwritten harmlessly.
     if (templateKeys.has('Income:7050') && !has('Income:7050')) {
-      out.push({ sheet: 'Income', cfrCode: 7050, amount: round2(incSum) });
+      out.push({ sheet: 'Income', cfrCode: 7050, amount: round2(incBeforeTax) });
     }
     return out;
   }
@@ -302,7 +310,7 @@ export function applyClosingEntry(codeCells: CfrCodeCell[], templateKeys: Set<st
   }
   // See the post-closing branch — same always-typed 7050 result row.
   if (templateKeys.has('Income:7050') && !has('Income:7050')) {
-    out.push({ sheet: 'Income', cfrCode: 7050, amount: round2(incSum) });
+    out.push({ sheet: 'Income', cfrCode: 7050, amount: round2(incBeforeTax) });
   }
   return out;
 }

@@ -62,6 +62,37 @@ describe('prior-return', () => {
     expect(res.checkedCodes).toBe(2);
   });
 
+  it('does not misclassify a positive-convention return with a typed-over TOTAL row', async () => {
+    // Regression: a hand-typed TOTAL ASSETS literal (code 2299) used to be summed
+    // into the asset side, doubling it → convention 'unknown' → a spurious
+    // BLOCKING error on a genuinely-balanced return.
+    const prior = await syntheticCfrWorkbook({
+      bSheet: [
+        { row: 10, code: 2150, value: 1000 }, // asset
+        { row: 11, code: 2299, value: 1000 }, // TOTAL ASSETS typed over as a literal
+        { row: 12, code: 3801, value: 1000 }, // equity
+      ],
+      income: [{ row: 5, code: 5000, value: -5000 }],
+    });
+    const review = await reviewPriorReturn(prior);
+    expect(review.convention).toBe('positive');
+    expect(review.findings.filter((f) => f.severity === 'error')).toEqual([]);
+  });
+
+  it('cross-check does not flag template TOTAL rows as unproduced-code mismatches', async () => {
+    const prior = await syntheticCfrWorkbook({
+      bSheet: [
+        { row: 10, code: 2150, value: 4000 },
+        { row: 11, code: 2299, value: 4000 }, // TOTAL ASSETS — mapping never produces this
+      ],
+      income: [],
+    });
+    const etb: EtbAccount[] = [{ accountCode: '1200', accountName: 'Bank', cyBalance: 5000, pyBalance: 4000 }];
+    const profile: MappingProfile = { rules: [{ ledgerCode: '1200', cfrCode: 2150, sheet: 'B_Sheet' }] };
+    const res = await priorYearCrossCheck(prior, etb, profile);
+    expect(res.mismatches.some((m) => m.cfrCode === 2299)).toBe(false);
+  });
+
   it('cross-check reports per-code mismatches', async () => {
     const prior = await syntheticCfrWorkbook({
       bSheet: [{ row: 10, code: 2150, value: 9999 }],

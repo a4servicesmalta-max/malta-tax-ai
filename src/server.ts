@@ -77,6 +77,19 @@ interface Session {
 }
 
 export function createApp() {
+  // Fail closed: without SESSION_SECRET the session cookie is signed with a
+  // well-known default, so anyone can mint a valid cookie for any user. Never
+  // boot the authenticated app in production in that state. (OPEN mode / tests
+  // bypass the auth gate entirely, so the secret is irrelevant there.)
+  if (
+    process.env.NODE_ENV === 'production' &&
+    process.env.TAXGEN_OPEN !== '1' &&
+    !process.env.SESSION_SECRET
+  ) {
+    throw new Error(
+      'SESSION_SECRET must be set in production — session cookies would otherwise be forgeable. Set it in the service environment and redeploy.'
+    );
+  }
   bootstrapAdmin(); // create the env-configured admin account if missing (idempotent)
   seedFromRepoIfEmpty(); // flywheel: corpus-learned mappings onto a fresh data disk (idempotent)
   const app = express();
@@ -813,14 +826,22 @@ export function createApp() {
       );
       // CORE cells are the preparer's actual account mappings (whole euros).
       // They are the return; they MUST land exactly or generation fails.
-      const roundedCells = fill.codeCells.map((c) => ({ ...c, amount: Math.round(c.amount) }));
-      const coreKeys = new Set(roundedCells.map((c) => `${c.sheet}:${c.cfrCode}`));
+      const coreKeys = new Set(fill.codeCells.map((c) => `${c.sheet}:${c.cfrCode}`));
       // Closing entry (pre-closing ETBs: 3905 absorbs the year's result; RE b/f
       // and c/f rows 7501/7600 are added) + section totals. These are DERIVED
       // conveniences — a self-computing template legitimately overwrites them on
       // read-back — so they are best-effort: written only to writable input
       // rows, and never allowed to block or fail a valid return.
-      const closedCells = applyClosingEntry(roundedCells, session.codeKeys);
+      //
+      // Detect the pre/post-closing signature on the EXACT 2-dp mapped figures,
+      // then round to whole euros. Rounding each line first lets the whole ETB's
+      // rounding drift (up to ~€0.5·N) push bsSum/incSum past applyClosingEntry's
+      // branch thresholds, silently skipping the entire closing/RE reconciliation
+      // (3905 not re-derived, p6 reserves block skipped, balance sheet off).
+      const closedCells = applyClosingEntry(fill.codeCells, session.codeKeys).map((c) => ({
+        ...c,
+        amount: Math.round(c.amount),
+      }));
       const core = closedCells.filter((c) => coreKeys.has(`${c.sheet}:${c.cfrCode}`));
       const derived = [
         ...closedCells.filter((c) => !coreKeys.has(`${c.sheet}:${c.cfrCode}`)),
@@ -895,6 +916,27 @@ export function createApp() {
       // to zero); any OTHER direct write failing deserves a loud warning.
       const zeroableSet = new Set(zeroable);
       const importantFailures = failedDirect.filter((f) => !zeroableSet.has(`${f.sheet}!${f.ref}`));
+      // The tax-driving direct cells — net profit (p3!E6), the tax-account
+      // allocation (p3 row 99) and every CONFIRMED add-back/loss/CA anchor — are
+      // as consequential as a core mapped figure. If one of them could not be
+      // written (its row isn't serialized in this template vintage), the return
+      // would ship silently wrong on the number that determines the tax. Fail
+      // fatally rather than degrade to a warning, mirroring the core-cell contract.
+      const criticalDirectRefs = new Set<string>([
+        'p3!E6',
+        'p3!E99',
+        'p3!G99',
+        'p3!I99',
+        ...[...writtenAnchorRefs].map((k) => k.replace(':', '!')),
+      ]);
+      const criticalFailures = importantFailures.filter((f) => criticalDirectRefs.has(`${f.sheet}!${f.ref}`));
+      if (criticalFailures.length) {
+        return res.status(500).json({
+          error:
+            `Generation stopped: ${criticalFailures.length} tax-driving figure(s) could not be written to the return (` +
+            `${criticalFailures.map((f) => `${f.sheet}!${f.ref}`).join(', ')}). The return was NOT produced — please report this.`,
+        });
+      }
       for (const f of importantFailures) {
         session.warnings.push(`Could not write ${f.sheet}!${f.ref} (${f.error}) — enter it on the return manually.`);
       }
@@ -1027,14 +1069,21 @@ export function createApp() {
         nid,
       });
 
-      session.output = { xlsx: buffer, summary };
-
       // Persist the return + spend a credit (production only; OPEN mode skips
-      // both so tests don't touch disk or need real users).
+      // both so tests don't touch disk or need real users). Spend the credit
+      // BEFORE exposing session.output — the pre-gate (credits < 1) and this
+      // spend straddle several awaits (template write + read-back), so two
+      // concurrent generations from a 1-credit user would both pass the gate.
+      // consumeCredit is the atomic authority: honour its result and 402 the
+      // loser instead of shipping a free second return.
       let returnId: string | null = null;
       let creditsLeft: number | null = null;
       if (!OPEN) {
-        consumeCredit(uid);
+        if (!consumeCredit(uid)) {
+          return res.status(402).json({
+            error: 'You have no free returns left. Contact us at info@vacei.com to add more.',
+          });
+        }
         returnId = crypto.randomUUID();
         saveReturn(
           {
@@ -1065,6 +1114,11 @@ export function createApp() {
         }
         creditsLeft = currentUser(cookieToken(req))?.credits ?? null;
       }
+
+      // Expose the generated file for download only AFTER the credit was
+      // successfully spent (a 402'd loser above must not leave a downloadable
+      // output on the session).
+      session.output = { xlsx: buffer, summary };
 
       // FLYWHEEL REMEMBER: the preparer just CONFIRMED this mapping by
       // generating — persist it per client so next year opens pre-mapped.

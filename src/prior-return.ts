@@ -28,6 +28,16 @@ function round2(n: number): number {
 const YEAR_CODE = 31;
 
 /**
+ * Template section-TOTAL code rows (mirrors mapping.ts SECTION_TOTALS + the RE
+ * memo rows). A filed return normally carries these as formulas, which
+ * isAggregateFormula already drops — but a hand-edited return that TYPED its
+ * totals over as literals would otherwise have them double-counted into the
+ * balance / net-profit / cross-check sums (a systematic false positive). Exclude
+ * them everywhere the SUM of line items is what matters.
+ */
+const KNOWN_TOTAL_CODES = new Set([2299, 3799, 3998, 5499, 5998, 6997, 7050, 7501, 7600]);
+
+/**
  * True when a value-cell formula marks a template AGGREGATE row (a subtotal
  * over other cells on the same sheet) rather than data. Classification is by
  * formula CONTENT, verified against real filings across template vintages:
@@ -56,7 +66,12 @@ function isAggregateFormula(v: CfrValue): boolean {
  */
 function dataRows(values: CfrValue[], sheet: string): CfrValue[] {
   return values.filter(
-    (v) => v.sheet === sheet && v.value !== null && v.cfrCode !== YEAR_CODE && !isAggregateFormula(v)
+    (v) =>
+      v.sheet === sheet &&
+      v.value !== null &&
+      v.cfrCode !== YEAR_CODE &&
+      !KNOWN_TOTAL_CODES.has(v.cfrCode) &&
+      !isAggregateFormula(v)
   );
 }
 
@@ -95,7 +110,11 @@ export async function readPriorReturn(buffer: Buffer): Promise<PriorReturnInfo> 
  * never a guessed figure.
  */
 export function priorLossesCarriedForward(buffer: Buffer): number | null {
-  return sumP4Row(buffer, /unabsorbed trading losses c\/?fwd/i);
+  // Tolerate label drift across template vintages ("c/fwd", "c/f", "c/fd") —
+  // matched the same way as the capital-allowances c/f row below so a vintage
+  // that abbreviates the losses row isn't silently missed. Still requires "c"
+  // so it can never match the brought-forward (b/fwd) row.
+  return sumP4Row(buffer, /unabsorbed trading losses c\/?f(?:wd)?/i);
 }
 
 /**
@@ -193,6 +212,10 @@ export async function priorYearCrossCheck(
   profile: MappingProfile
 ): Promise<CrossCheckResult> {
   const prior = await readPriorReturn(priorReturn);
+  // Line-item rows only — template TOTAL rows and aggregate formulas are not
+  // things the mapping produces, so counting them would flood the cross-check
+  // with false mismatches and inflate the per-sheet aggregate drift.
+  const priorData = [...dataRows(prior.values, 'B_Sheet'), ...dataRows(prior.values, 'Income')];
   const positive = prior.convention === 'positive';
   const pyAsCy: EtbAccount[] = etb
     .filter((a) => a.pyBalance !== null)
@@ -203,7 +226,7 @@ export async function priorYearCrossCheck(
   const mismatches: CrossCheckMismatch[] = [];
   let checked = 0;
   for (const cell of mapped.codeCells) {
-    const filed = prior.values.find((v) => v.sheet === cell.sheet && v.cfrCode === cell.cfrCode);
+    const filed = priorData.find((v) => v.sheet === cell.sheet && v.cfrCode === cell.cfrCode);
     if (!filed || filed.value === null) continue;
     checked++;
     const filedV = positive ? Math.abs(filed.value) : filed.value;
@@ -219,7 +242,7 @@ export async function priorYearCrossCheck(
   }
 
   // Filed codes the mapping never produces must not go silently unchecked.
-  for (const filed of prior.values) {
+  for (const filed of priorData) {
     if (filed.value === null || Math.abs(filed.value) <= TOL) continue;
     const produced = mapped.codeCells.some((c) => c.sheet === filed.sheet && c.cfrCode === filed.cfrCode);
     if (!produced) {
@@ -237,12 +260,12 @@ export async function priorYearCrossCheck(
   // drift (each inside tolerance) is still visible.
   const aggregateDrift: CrossCheckResult['aggregateDrift'] = [];
   const sheets = new Set<string>([
-    ...prior.values.filter((v) => v.value !== null).map((v) => v.sheet),
+    ...priorData.map((v) => v.sheet),
     ...mapped.codeCells.map((c) => c.sheet),
   ]);
   for (const sheet of sheets) {
     const filedTotal = round2(
-      prior.values.filter((v) => v.sheet === sheet && v.value !== null).reduce((a, v) => a + (v.value as number), 0)
+      priorData.filter((v) => v.sheet === sheet && v.value !== null).reduce((a, v) => a + (v.value as number), 0)
     );
     const mappedTotal = round2(
       mapped.codeCells.filter((c) => c.sheet === sheet).reduce((a, c) => a + c.amount, 0)

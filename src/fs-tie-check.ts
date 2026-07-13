@@ -38,20 +38,30 @@ const MONTHS: Record<string, number> = {
 export function extractApprovalDate(text: string): string | null {
   const flat = text.replace(/\s+/g, ' ');
   const scopes = [...flat.matchAll(/(?:approved|authorised for issue|signed)[^.]{0,120}/gi)].map((m) => m[0]);
+  const MON = 'January|February|March|April|May|June|July|August|September|October|November|December';
+  const iso = (day: number, month: number, year: number): string | null =>
+    day >= 1 && day <= 31 && month >= 1 && month <= 12
+      ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      : null;
   for (const scope of scopes) {
-    const worded = scope.match(
-      /\b(\d{1,2})\s*(?:st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)[ ,]+(\d{4})\b/i
-    );
-    if (worded) {
-      const [, d, mon, y] = worded;
-      const day = parseInt(d, 10), month = MONTHS[mon.toLowerCase()], year = parseInt(y, 10);
-      if (day >= 1 && day <= 31) return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    // A single approval sentence often carries TWO dates — the accounting
+    // period-end ("for the year ended 31 December 2024") and the board-approval
+    // date ("... on 27 October 2025"). We want the approval date: prefer a date
+    // introduced by "on", and never a date introduced by "ended"/"ending".
+    const worded = [
+      ...scope.matchAll(new RegExp(`(\\b[a-z]+\\b)\\s+(\\d{1,2})\\s*(?:st|nd|rd|th)?\\s+(${MON})[ ,]+(\\d{4})\\b`, 'gi')),
+    ];
+    const isPeriodEnd = (w: string) => /^end(?:ed|ing)?$/i.test(w);
+    const pickW = worded.find((m) => /^on$/i.test(m[1])) ?? worded.find((m) => !isPeriodEnd(m[1]));
+    if (pickW) {
+      const date = iso(parseInt(pickW[2], 10), MONTHS[pickW[3].toLowerCase()], parseInt(pickW[4], 10));
+      if (date) return date;
     }
-    const numeric = scope.match(/\b(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})\b/);
-    if (numeric) {
-      const day = parseInt(numeric[1], 10), month = parseInt(numeric[2], 10), year = parseInt(numeric[3], 10);
-      if (day >= 1 && day <= 31 && month >= 1 && month <= 12)
-        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const numeric = [...scope.matchAll(/(\b[a-z]+\b\s+)?(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})\b/gi)];
+    const pickN = numeric.find((m) => /^on\s+$/i.test(m[1] ?? '')) ?? numeric.find((m) => !isPeriodEnd((m[1] ?? '').trim()));
+    if (pickN) {
+      const date = iso(parseInt(pickN[2], 10), parseInt(pickN[3], 10), parseInt(pickN[4], 10));
+      if (date) return date;
     }
   }
   return null;
@@ -60,9 +70,13 @@ export function extractApprovalDate(text: string): string | null {
 // Anchored to the whole trimmed label so note text ("the net profit margin")
 // can never match. Accepts profit and loss forms: "Profit for the year",
 // "Loss for the year", "(Loss) for the year", "Profit/(loss) for the period",
-// "Net profit", "Net loss".
+// "Net profit", "Net loss", and — matched FIRST because it prints ABOVE the
+// after-tax line in an income statement — "Profit/(loss) before tax(ation)".
+// The CfR return's field 1a (p3!E6) is net profit BEFORE tax, so tying against
+// the FS before-tax figure (when present) avoids a false mismatch equal to the
+// tax charge; the after-tax "for the year" line is the fallback.
 const NET_PROFIT_RE =
-  /^\(?(?:profit|loss)\)?\s*(?:\/?\s*\(?(?:loss|profit)\)?)?\s*for the (?:year|period)$|^net (?:profit|loss)$/i;
+  /^\(?(?:profit|loss)\)?\s*(?:\/?\s*\(?(?:loss|profit)\)?)?\s*before tax(?:ation)?$|^\(?(?:profit|loss)\)?\s*(?:\/?\s*\(?(?:loss|profit)\)?)?\s*for the (?:year|period)$|^net (?:profit|loss)$/i;
 const TOTAL_ASSETS_RE = /^total assets$/i;
 
 /** All tie-able FS lines. "total equity(?! and)" keeps "Total equity and liabilities" out. */

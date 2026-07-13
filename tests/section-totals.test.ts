@@ -1,5 +1,26 @@
 import { describe, it, expect } from 'vitest';
-import { deriveSectionTotals, TOTAL_CODE_KEYS } from '../src/mapping';
+import { deriveSectionTotals, applyClosingEntry, TOTAL_CODE_KEYS } from '../src/mapping';
+
+describe('applyClosingEntry — 7050 net income BEFORE tax', () => {
+  it('excludes the below-the-line tax charge (7060+) from the 7050 row', () => {
+    const templateKeys = new Set(['Income:7050', 'Income:7501', 'Income:7600', 'B_Sheet:3905']);
+    // Post-closing signature: B_Sheet balances; Income still stated, incl a tax
+    // charge booked to 7060. 7050 ("NET INCOME BEFORE TAX") must be revenue +
+    // expenses ONLY (−700), never net of the €100 tax (−600).
+    const out = applyClosingEntry(
+      [
+        { sheet: 'B_Sheet', cfrCode: 2150, amount: 800 },
+        { sheet: 'B_Sheet', cfrCode: 3801, amount: -200 },
+        { sheet: 'B_Sheet', cfrCode: 3905, amount: -600 },
+        { sheet: 'Income', cfrCode: 5000, amount: -1000 },
+        { sheet: 'Income', cfrCode: 6000, amount: 300 },
+        { sheet: 'Income', cfrCode: 7060, amount: 100 },
+      ],
+      templateKeys
+    );
+    expect(out.find((c) => c.sheet === 'Income' && c.cfrCode === 7050)?.amount).toBe(-700);
+  });
+});
 
 const cells = [
   { sheet: 'B_Sheet' as const, cfrCode: 2150, amount: 1000 },

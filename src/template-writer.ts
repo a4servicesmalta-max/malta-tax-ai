@@ -154,21 +154,27 @@ function clearCell(sheetXml: string, ref: string, p: string): string {
   return sheetXml.replace(cellRe, `<${p}c r="${ref}"${style ? ` s="${style}"` : ''}/>`);
 }
 
-/** Force Excel to fully recalculate when the file is opened. */
-function setFullCalcOnLoad(wbXml: string): string {
+/**
+ * Force Excel to fully recalculate when the file is opened. Handles every
+ * calcPr serialization: attribute already present (flip 0→1), self-closing
+ * `<calcPr .../>`, a paired/open `<calcPr ...>`, or no calcPr at all. Missing
+ * this (the old code only handled the self-closing form) leaves the produced
+ * return showing the template's STALE cached zeros for every formula cell —
+ * i.e. a return that looks like it computed no tax.
+ */
+export function setFullCalcOnLoad(wbXml: string): string {
   const p = detectPrefix(wbXml);
-  if (new RegExp(`<${p}calcPr\\b[^>]*/>`).test(wbXml)) {
-    if (/fullCalcOnLoad=/.test(wbXml))
-      return wbXml.replace(/fullCalcOnLoad="0"/, 'fullCalcOnLoad="1"');
-    return wbXml.replace(
-      new RegExp(`<${p}calcPr\\b([^>]*?)\\s*/>`),
-      `<${p}calcPr$1 fullCalcOnLoad="1"/>`
-    );
-  }
-  if (!new RegExp(`<${p}calcPr`).test(wbXml)) {
-    return wbXml.replace(new RegExp(`(</${p}sheets>)`), `$1<${p}calcPr fullCalcOnLoad="1"/>`);
-  }
-  return wbXml;
+  if (/fullCalcOnLoad="0"/.test(wbXml)) return wbXml.replace(/fullCalcOnLoad="0"/, 'fullCalcOnLoad="1"');
+  if (/fullCalcOnLoad="1"/.test(wbXml)) return wbXml;
+  // Self-closing <calcPr .../> — inject the attribute (checked before the open
+  // form so a self-closing tag is never mangled into `<calcPr … / fullCalc…>`).
+  const selfClose = new RegExp(`<${p}calcPr\\b([^>]*?)\\s*/>`);
+  if (selfClose.test(wbXml)) return wbXml.replace(selfClose, `<${p}calcPr$1 fullCalcOnLoad="1"/>`);
+  // Paired/open <calcPr ...> — inject on the opening tag.
+  const openTag = new RegExp(`<${p}calcPr\\b([^>]*?)>`);
+  if (openTag.test(wbXml)) return wbXml.replace(openTag, `<${p}calcPr$1 fullCalcOnLoad="1">`);
+  // No calcPr element at all — add one after </sheets>.
+  return wbXml.replace(new RegExp(`(</${p}sheets>)`), `$1<${p}calcPr fullCalcOnLoad="1"/>`);
 }
 
 /**
