@@ -13,7 +13,7 @@
   * { box-sizing: border-box; }
   a { color: #1F1F1F; text-decoration: none; }
   a:hover { color: #000000; }
-  section[id] { scroll-margin-top: 72px; }
+  section[id] { scroll-margin-top: 84px; }
   @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
   .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.7s ease, transform 0.7s ease; }
   .reveal.in { opacity: 1; transform: none; }
@@ -22,6 +22,31 @@
   .btn-light:hover { background: #F8F9FA !important; }
   .btn-white:hover { background: #F1F3F4 !important; }
   .section { padding: 50px clamp(20px,4vw,44px); }
+  .site-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 72px;
+    padding: 16px clamp(20px, 4vw, 44px);
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-bottom: 1px solid transparent;
+    box-shadow: none;
+    transition: background 0.3s, box-shadow 0.3s, border-color 0.3s, backdrop-filter 0.3s;
+  }
+  .site-nav.is-solid {
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(18px) saturate(1.2);
+    -webkit-backdrop-filter: blur(18px) saturate(1.2);
+    border-bottom-color: rgba(0, 0, 0, 0.06);
+    box-shadow: 0 8px 32px rgba(32, 33, 36, 0.06);
+  }
   .nav-links {
     position: fixed;
     top: 0;
@@ -30,7 +55,7 @@
     display: flex;
     align-items: center;
     gap: 26px;
-    height: 70px;
+    height: 72px;
     padding: 0 clamp(20px, 4vw, 44px);
     font-size: 14.5px;
     color: #3C4043;
@@ -45,9 +70,11 @@
     height: 42px;
     margin: 0;
     padding: 0;
-    border: 1px solid #DADCE0;
+    border: 1px solid rgba(218, 220, 224, 0.8);
     border-radius: 999px;
-    background: #FFFFFF;
+    background: rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     cursor: pointer;
     flex: none;
     position: relative;
@@ -81,11 +108,14 @@
       right: 0;
       width: min(320px, 86vw);
       height: 100dvh;
-      padding: 72px 28px 32px;
+      padding: 80px 28px 32px;
       flex-direction: column;
       align-items: stretch;
       gap: 0;
-      background: #FFFFFF;
+      background: rgba(255, 255, 255, 0.78);
+      backdrop-filter: blur(22px) saturate(1.25);
+      -webkit-backdrop-filter: blur(22px) saturate(1.25);
+      border-left: 1px solid rgba(255, 255, 255, 0.5);
       box-shadow: -12px 0 40px rgba(32, 33, 36, 0.12);
       transform: translateX(105%);
       transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
@@ -113,7 +143,7 @@
     .nav-close {
       display: inline-flex !important;
       position: absolute;
-      top: 14px;
+      top: 16px;
       right: 20px;
       z-index: 2;
       align-items: center;
@@ -122,9 +152,11 @@
       height: 42px;
       margin: 0;
       padding: 0;
-      border: 1px solid #DADCE0;
+      border: 1px solid rgba(218, 220, 224, 0.8);
       border-radius: 999px;
-      background: #FFFFFF;
+      background: rgba(255, 255, 255, 0.65);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
       cursor: pointer;
       color: #1F1F1F;
       pointer-events: auto;
@@ -190,10 +222,10 @@
 <div style="background:#FFFFFF">
 
   <!-- NAV -->
-  <nav id="nav" style="position:fixed; top:0; left:0; width:100%; z-index:60; display:flex; align-items:center; justify-content:space-between; padding:14px clamp(20px,4vw,44px); background:rgba(255,255,255,0); transition:background 0.3s, box-shadow 0.3s">
+  <nav id="nav" class="site-nav">
     <a href="#top" style="display:flex; align-items:center; gap:0; position:relative; z-index:62">
-      <img src="/assets/vacei-logo.png" alt="VACEI" style="width:24px; height:28px; object-fit:contain; display:block; flex:none">
-      <span id="brandWord" style="font-size:17px; font-weight:600; letter-spacing:-0.02em; white-space:nowrap; overflow:hidden; max-width:240px; opacity:1; padding-left:11px; transform:translateX(0); transition:max-width 0.45s cubic-bezier(0.22,1,0.36,1), opacity 0.3s ease, padding-left 0.45s cubic-bezier(0.22,1,0.36,1), transform 0.45s cubic-bezier(0.22,1,0.36,1)">Malta Tax AI</span>
+      <img src="/assets/vacei-logo.png" alt="VACEI" style="width:34px; height:40px; object-fit:contain; display:block; flex:none">
+      <span id="brandWord" style="font-size:18px; font-weight:600; letter-spacing:-0.02em; white-space:nowrap; overflow:hidden; max-width:260px; opacity:1; padding-left:12px; transform:translateX(0); transition:max-width 0.45s cubic-bezier(0.22,1,0.36,1), opacity 0.3s ease, padding-left 0.45s cubic-bezier(0.22,1,0.36,1), transform 0.45s cubic-bezier(0.22,1,0.36,1)">Malta Tax AI</span>
     </a>
     <button type="button" id="navToggle" class="nav-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="navLinks">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -477,17 +509,13 @@
   function onScroll() {
     var y = window.scrollY || 0;
     if (nav) {
-      var solid = y > 40 || navOpen;
-      nav.style.background = solid ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0)';
-      nav.style.boxShadow = solid ? '0 1px 0 rgba(0,0,0,0.07)' : 'none';
-      nav.style.backdropFilter = solid ? 'blur(14px)' : 'none';
-      nav.style.webkitBackdropFilter = solid ? 'blur(14px)' : 'none';
+      nav.classList.toggle('is-solid', y > 40 || navOpen);
     }
     if (bw) {
       var collapsed = y > 120 && !navOpen;
-      bw.style.maxWidth = collapsed ? '0px' : '240px';
+      bw.style.maxWidth = collapsed ? '0px' : '260px';
       bw.style.opacity = collapsed ? '0' : '1';
-      bw.style.paddingLeft = collapsed ? '0px' : '11px';
+      bw.style.paddingLeft = collapsed ? '0px' : '12px';
       bw.style.transform = collapsed ? 'translateX(-8px)' : 'translateX(0)';
     }
   }
