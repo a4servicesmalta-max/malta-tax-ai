@@ -3,24 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="https://db.onlinewebfonts.com/c/5ac3fe7c6abd2f62067f266d89671492?family=HelveticaNowDisplay-Medium">
-<link rel="stylesheet" href="https://db.onlinewebfonts.com/c/1aa3377e489837a26d019bba501e779d?family=HelveticaNowDisplayW01-Rg">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/app.css">
 <style>
-  :root{--font-heading:'HelveticaNowDisplay-Medium','Helvetica Neue',Arial,sans-serif;--font-body:'HelveticaNowDisplayW01-Rg','Helvetica Neue',Arial,sans-serif}
-  *{box-sizing:border-box}
-  html,body{margin:0;padding:0;background:#faf9f7;font-family:var(--font-body)}
+  :root{--font-heading:var(--font-display);--font-body:var(--font-sans)}
+  html,body{margin:0;padding:0;background:var(--color-bg-app);font-family:var(--font-body);color:var(--color-text)}
   a{text-decoration:none}
-  input:focus{border-color:#494fdf !important;background:#fff !important}
+  input:focus{border-color:var(--color-primary)!important;background:#fff!important}
 </style>
 <title>Create your account — Malta Tax AI</title>
 </head>
 <body>
-<div style="display:flex;min-height:100vh;width:100%;font-family:var(--font-body);color:#14161a;background:#faf9f7">
+<div style="display:flex;min-height:100vh;width:100%;font-family:var(--font-body);color:#14161a;background:var(--color-bg-app)">
 
   <div style="position:relative;width:46%;min-width:420px;overflow:hidden;display:flex;flex-direction:column;padding:44px 52px;color:#14161a">
     <video src="uploads/hero.mp4" poster="assets/tax-hero-scan.png" autoplay loop muted playsinline preload="auto" style="position:absolute;top:-12px;left:-12px;width:170%;height:calc(100% + 24px);object-fit:cover;object-position:left center;z-index:0;filter:blur(3px) saturate(0.92)"></video>
-    <div style="position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(160deg,rgba(250,249,247,0.92) 0%,rgba(250,249,247,0.72) 55%,rgba(250,249,247,0.45) 100%)"></div>
+    <div style="position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(160deg,rgba(241,243,250,0.92) 0%,rgba(241,243,250,0.72) 55%,rgba(241,243,250,0.45) 100%)"></div>
 
     <a href="/" style="position:relative;z-index:2;display:flex;align-items:center;gap:10px">
       <img src="assets/vacei-logo.png" alt="VACEI" style="width:26px;height:30px;object-fit:contain;display:block">
@@ -42,7 +39,7 @@
     <p style="position:relative;z-index:2;font-size:13px;color:#5c5951;font-style:italic;margin:0">Built and run inside a working Malta accounting firm.</p>
   </div>
 
-  <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:48px 32px;background:#faf9f7;border-left:1px solid #e7e5e0">
+  <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:48px 32px;background:var(--color-bg-app);border-left:1px solid var(--color-border)">
     <div style="width:100%;max-width:420px">
       <div style="margin-bottom:28px">
         <h2 style="font-family:var(--font-heading);font-size:29px;font-weight:500;color:#14161a;letter-spacing:-0.02em;margin:0 0 8px">Create your account</h2>
@@ -56,9 +53,9 @@
       </div>
 
       <form id="signup-form">
-        <div style="margin-bottom:14px"><label style="display:block;font-size:13px;color:#5c5951;margin-bottom:6px">Work email</label><input id="su-email" type="email" autocomplete="email" placeholder="you@firm.com" style="width:100%;padding:12px 16px;border-radius:12px;border:1px solid #ddd9d2;background:#fff;font-family:var(--font-body);font-size:14px;color:#14161a;outline:none;transition:border-color .15s"></div>
-        <div style="margin-bottom:14px"><label style="display:block;font-size:13px;color:#5c5951;margin-bottom:6px">Firm <span style="color:#a8a49c">(optional)</span></label><input id="su-firm" autocomplete="organization" placeholder="e.g. VACEI Tax" style="width:100%;padding:12px 16px;border-radius:12px;border:1px solid #ddd9d2;background:#fff;font-family:var(--font-body);font-size:14px;color:#14161a;outline:none;transition:border-color .15s"></div>
-        <div style="margin-bottom:22px"><label style="display:block;font-size:13px;color:#5c5951;margin-bottom:6px">Password</label><input id="su-pass" type="password" autocomplete="new-password" placeholder="At least 8 characters" style="width:100%;padding:12px 16px;border-radius:12px;border:1px solid #ddd9d2;background:#fff;font-family:var(--font-body);font-size:14px;color:#14161a;outline:none;transition:border-color .15s"></div>
+        <div style="margin-bottom:14px"><label style="display:block;font-size:13px;color:#5c5951;margin-bottom:6px">Work email</label><input id="su-email" type="email" autocomplete="email" placeholder="you@firm.com" style="width:100%;padding:12px 16px;border-radius:12px;border:1px solid var(--color-border-strong);background:#fff;font-family:var(--font-body);font-size:14px;color:#14161a;outline:none;transition:border-color .15s"></div>
+        <div style="margin-bottom:14px"><label style="display:block;font-size:13px;color:#5c5951;margin-bottom:6px">Firm <span style="color:#a8a49c">(optional)</span></label><input id="su-firm" autocomplete="organization" placeholder="e.g. VACEI Tax" style="width:100%;padding:12px 16px;border-radius:12px;border:1px solid var(--color-border-strong);background:#fff;font-family:var(--font-body);font-size:14px;color:#14161a;outline:none;transition:border-color .15s"></div>
+        <div style="margin-bottom:22px"><label style="display:block;font-size:13px;color:#5c5951;margin-bottom:6px">Password</label><input id="su-pass" type="password" autocomplete="new-password" placeholder="At least 8 characters" style="width:100%;padding:12px 16px;border-radius:12px;border:1px solid var(--color-border-strong);background:#fff;font-family:var(--font-body);font-size:14px;color:#14161a;outline:none;transition:border-color .15s"></div>
 
         <div id="su-error" style="display:none;margin-bottom:16px;padding:11px 14px;border-radius:12px;background:rgba(209,73,58,0.07);border:1px solid rgba(209,73,58,0.35);color:#b23a2c;font-size:13.5px"></div>
 
@@ -67,7 +64,7 @@
         <p style="font-size:12px;color:#a8a49c;text-align:center;margin-top:16px;line-height:1.5">By creating an account you agree to the <a href="/terms" target="_blank" style="color:#494fdf">Terms of Use</a> &mdash; a professional preparer reviews and files every return. Your files are processed to prepare your return and are not used to train AI.</p>
       </form>
 
-      <p style="font-size:14px;color:#5c5951;text-align:center;margin-top:24px;padding-top:24px;border-top:1px solid #e7e5e0">Already have an account? <a href="/login" style="color:#494fdf;font-weight:600">Sign in</a></p>
+      <p style="font-size:14px;color:#5c5951;text-align:center;margin-top:24px;padding-top:24px;border-top:1px solid var(--color-border)">Already have an account? <a href="/login" style="color:#494fdf;font-weight:600">Sign in</a></p>
     </div>
   </div>
 
