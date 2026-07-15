@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Malta Tax AI — the Malta tax return, mapped in minutes</title>
+<meta name="description" content="Upload the trial balance, confirm the mapping and interview, download a filled CfR return. No figure produced by AI.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #FFFFFF; font-family: 'Inter', 'Helvetica Neue', sans-serif; color: #1F1F1F; -webkit-font-smoothing: antialiased; overflow-x: clip; }
+  * { box-sizing: border-box; }
+  a { color: #1F1F1F; text-decoration: none; }
+  a:hover { color: #000000; }
+  section[id] { scroll-margin-top: 72px; }
+  @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+  .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.7s ease, transform 0.7s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; } }
+  .btn-dark:hover { background: #000000 !important; color: #FFFFFF !important; }
+  .btn-light:hover { background: #F8F9FA !important; }
+  .btn-white:hover { background: #F1F3F4 !important; }
+  .section { padding: 50px clamp(20px,4vw,44px); }
+</style>
+</head>
+<body>
+
+<div style="background:#FFFFFF">
+
+  <!-- NAV -->
+  <nav id="nav" style="position:fixed; top:0; left:0; width:100%; z-index:60; display:flex; align-items:center; justify-content:space-between; padding:14px clamp(20px,4vw,44px); background:rgba(255,255,255,0); transition:background 0.3s, box-shadow 0.3s">
+    <a href="#top" style="display:flex; align-items:center; gap:0">
+      <img src="/assets/vacei-logo.png" alt="VACEI" style="width:24px; height:28px; object-fit:contain; display:block; flex:none">
+      <span id="brandWord" style="font-size:17px; font-weight:600; letter-spacing:-0.02em; white-space:nowrap; overflow:hidden; max-width:240px; opacity:1; padding-left:11px; transform:translateX(0); transition:max-width 0.45s cubic-bezier(0.22,1,0.36,1), opacity 0.3s ease, padding-left 0.45s cubic-bezier(0.22,1,0.36,1), transform 0.45s cubic-bezier(0.22,1,0.36,1)">Malta Tax AI</span>
+    </a>
+    <div style="display:flex; align-items:center; gap:26px; font-size:14.5px; color:#3C4043">
+      <a href="#product" style="color:#3C4043">Product</a>
+      <a href="#process" style="color:#3C4043">Process</a>
+      <a href="#computes" style="color:#3C4043">What it computes</a>
+      <a href="#pricing" style="color:#3C4043">Pricing</a>
+      <a href="/login" class="btn-dark" style="display:inline-flex; align-items:center; background:#1F1F1F; color:#FFFFFF; border-radius:999px; padding:9px 20px; font-weight:500">Sign in</a>
+    </div>
+  </nav>
+
+  <!-- HERO (video bg like old landing) -->
+  <section id="top" class="section" style="position:relative; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding-top:120px; overflow:hidden">
+    <div style="position:absolute; inset:0; pointer-events:none; overflow:hidden">
+      <video src="/uploads/hero.mp4" poster="/assets/tax-hero-scan.png" autoplay loop muted playsinline preload="auto" style="position:absolute; top:-12px; left:-12px; width:162%; height:calc(100% + 24px); object-fit:cover; object-position:left center; filter:blur(3px) saturate(0.92)"></video>
+      <div style="position:absolute; inset:0; background:radial-gradient(115% 85% at 50% 40%, rgba(255,255,255,0.55) 30%, rgba(255,255,255,0.92) 100%)"></div>
+    </div>
+    <div style="position:relative; max-width:980px; z-index:1">
+      <h1 style="margin:0; font-size:clamp(42px,7vw,84px); font-weight:500; letter-spacing:-0.035em; line-height:1.04; color:#1F1F1F">The Malta tax return,<br><span id="typed"></span><span id="cursor" style="display:inline-block; width:0.08em; height:0.82em; background:#1F1F1F; vertical-align:-0.08em; margin-left:0.08em; border-radius:1px; animation:blink 1s step-end infinite"></span></h1>
+      <p style="margin:28px auto 0; font-size:clamp(16px,2vw,19px); line-height:1.55; color:#5F6368; max-width:560px; text-wrap:pretty">Upload the trial balance, confirm the mapping and interview, download a filled CfR return. Every amount comes from your books or an answer you confirmed — never from AI.</p>
+      <div style="display:flex; gap:12px; justify-content:center; margin-top:34px; flex-wrap:wrap">
+        <a href="/signup" class="btn-dark" style="display:inline-flex; align-items:center; background:#1F1F1F; color:#FFFFFF; border-radius:999px; padding:14px 28px; font-size:15.5px; font-weight:500">Get 3 free returns</a>
+        <a href="mailto:info@vacei.com?subject=Demo%20request" class="btn-light" style="display:inline-flex; align-items:center; background:#FFFFFF; color:#1F1F1F; border:1px solid #DADCE0; border-radius:999px; padding:14px 28px; font-size:15.5px; font-weight:500">Book a 10-min demo</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRODUCT -->
+  <section id="product" class="section">
+    <div style="max-width:1240px; margin:0 auto; display:flex; align-items:center; gap:clamp(32px,5vw,72px); flex-wrap:wrap">
+      <div class="reveal" style="flex:1 1 380px; min-width:0">
+        <h2 style="margin:0 0 22px; font-size:clamp(34px,4.6vw,56px); font-weight:500; letter-spacing:-0.03em; line-height:1.06">Malta Tax AI</h2>
+        <p style="margin:0 0 34px; font-size:clamp(16px,1.8vw,19px); line-height:1.6; color:#5F6368; max-width:44ch; text-wrap:pretty">From Extended Trial Balance to a professionally filled CfR corporate return — with a computation working paper you can defend. Built and run inside a working Malta accounting firm.</p>
+        <a href="#process" class="btn-light" style="display:inline-flex; align-items:center; background:#FFFFFF; color:#1F1F1F; border:1px solid #DADCE0; border-radius:999px; padding:15px 30px; font-size:16px; font-weight:500">See how it works</a>
+      </div>
+      <div class="reveal" style="flex:1.2 1 420px; min-width:0">
+        <img src="/assets/how-it-works-poster.png" alt="Malta Tax AI preparation workflow" style="display:block; width:100%; border-radius:18px">
+      </div>
+    </div>
+  </section>
+
+  <!-- PROCESS -->
+  <section id="process" class="section">
+    <div style="max-width:1240px; margin:0 auto; display:flex; align-items:center; gap:clamp(28px,4vw,64px); flex-wrap:wrap">
+      <div class="reveal" style="flex:1 1 300px; min-width:260px">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:0.12em; color:#9AA0A6; margin-bottom:14px">HOW IT WORKS</div>
+        <h2 style="margin:0 0 26px; font-size:clamp(30px,4vw,48px); font-weight:500; letter-spacing:-0.03em; line-height:1.08">From trial balance to filed return.</h2>
+        <div style="padding:16px 0 16px 14px; border-top:1px solid #E8EAED; border-left:3px solid #1F1F1F">
+          <div style="font-size:16.5px; font-weight:600">Upload your files</div>
+          <div style="font-size:14.5px; color:#5F6368; line-height:1.55; margin-top:4px">ETB, financial statements and the blank CfR template — read straight from source.</div>
+        </div>
+        <div style="padding:16px 0 16px 14px; border-top:1px solid #E8EAED; border-left:3px solid transparent">
+          <div style="font-size:16.5px; font-weight:600">Confirm mapping &amp; interview</div>
+          <div style="font-size:14.5px; color:#5F6368; line-height:1.55; margin-top:4px">Proposed CfR codes with confidence scores, then Act-grounded add-backs and allowances.</div>
+        </div>
+        <div style="padding:16px 0 16px 14px; border-top:1px solid #E8EAED; border-left:3px solid transparent">
+          <div style="font-size:16.5px; font-weight:600">Download the return</div>
+          <div style="font-size:14.5px; color:#5F6368; line-height:1.55; margin-top:4px">The official template fills itself and recalculates the tax charge on open.</div>
+        </div>
+      </div>
+      <div class="reveal" style="flex:1.35 1 420px; min-width:280px">
+        <div style="border-radius:24px; border:1px solid #E8EAED; box-shadow:0 30px 80px -30px rgba(32,33,36,0.3); overflow:hidden; background:#F8F9FA">
+          <img src="/assets/tax-hero-scan.png" alt="Tax preparation in progress" style="display:block; width:100%; aspect-ratio:16/9; object-fit:cover">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="section">
+    <div style="max-width:1240px; margin:0 auto">
+      <div class="reveal" style="text-align:center; margin-bottom:40px">
+        <h2 style="margin:0 0 14px; font-size:clamp(30px,4vw,48px); font-weight:500; letter-spacing:-0.03em">Everything on the way to the return.</h2>
+        <p style="margin:0 auto; font-size:17px; color:#5F6368; max-width:560px; line-height:1.55">Mapping, interview, computation and generation — each step visible and reviewable, not a black box.</p>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%,420px),1fr)); gap:26px">
+        <div class="reveal" style="background:#F8F9FA; border-radius:28px; overflow:hidden">
+          <div style="padding:24px 24px 0"><img src="/assets/wc1.png" alt="" style="display:block; width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:14px; border:1px solid #E8EAED; background:#FFFFFF"></div>
+          <div style="padding:24px 28px 28px">
+            <h3 style="margin:0 0 7px; font-size:19px; font-weight:600; letter-spacing:-0.01em">AI-proposed account mapping</h3>
+            <p style="margin:0; font-size:14.5px; color:#5F6368; line-height:1.6">Every ledger account gets a suggested CfR code with a confidence score — confirm or override each one.</p>
+          </div>
+        </div>
+        <div class="reveal" style="background:#F8F9FA; border-radius:28px; overflow:hidden">
+          <div style="padding:24px 24px 0"><img src="/assets/wc2.png" alt="" style="display:block; width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:14px; border:1px solid #E8EAED; background:#FFFFFF"></div>
+          <div style="padding:24px 28px 28px">
+            <h3 style="margin:0 0 7px; font-size:19px; font-weight:600; letter-spacing:-0.01em">Guided tax interview</h3>
+            <p style="margin:0; font-size:14.5px; color:#5F6368; line-height:1.6">Add-backs, deductions, allowances and losses — each with its legal basis, pre-filled where the ETB makes it obvious.</p>
+          </div>
+        </div>
+        <div class="reveal" style="background:#F8F9FA; border-radius:28px; overflow:hidden">
+          <div style="padding:24px 24px 0"><img src="/assets/wc3.png" alt="" style="display:block; width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:14px; border:1px solid #E8EAED; background:#FFFFFF"></div>
+          <div style="padding:24px 28px 28px">
+            <h3 style="margin:0 0 7px; font-size:19px; font-weight:600; letter-spacing:-0.01em">Full computation working paper</h3>
+            <p style="margin:0; font-size:14.5px; color:#5F6368; line-height:1.6">Net profit → adjustments → chargeable income → tax charge, laid out like an audit working paper.</p>
+          </div>
+        </div>
+        <div class="reveal" style="background:#F8F9FA; border-radius:28px; overflow:hidden">
+          <div style="padding:24px 24px 0"><img src="/assets/who1.png" alt="" style="display:block; width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:14px; border:1px solid #E8EAED; background:#FFFFFF"></div>
+          <div style="padding:24px 28px 28px">
+            <h3 style="margin:0 0 7px; font-size:19px; font-weight:600; letter-spacing:-0.01em">Direct-to-template generation</h3>
+            <p style="margin:0; font-size:14.5px; color:#5F6368; line-height:1.6">Fills the official CfR return itself; it recalculates on open, and every unmatched code is called out.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMPUTES -->
+  <section id="computes" class="section">
+    <div style="max-width:1240px; margin:0 auto">
+      <div class="reveal" style="margin-bottom:40px">
+        <h2 style="margin:0 0 14px; font-size:clamp(30px,4vw,48px); font-weight:500; letter-spacing:-0.03em; max-width:20ch">What it computes — deterministically.</h2>
+        <p style="margin:0; font-size:17px; color:#5F6368; max-width:600px; line-height:1.55">Mapping, adjustments and the tax charge itself — each one visible and reviewable. No figure on the return is ever produced by an AI model.</p>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:16px">
+        <div class="reveal" style="background:#E8F0FE; border-radius:28px; padding:30px; min-height:210px; display:flex; flex-direction:column; justify-content:space-between">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#1967D2">01</div>
+          <div><h3 style="margin:0 0 8px; font-size:20px; font-weight:600; color:#174EA6">Account mapping</h3><p style="margin:0; font-size:14px; color:#1F1F1F; opacity:0.75; line-height:1.55">Ledger → CfR code proposals with confidence scoring and BS vs P&amp;L classification.</p></div>
+        </div>
+        <div class="reveal" style="background:#E6F4EA; border-radius:28px; padding:30px; min-height:210px; display:flex; flex-direction:column; justify-content:space-between">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#188038">02</div>
+          <div><h3 style="margin:0 0 8px; font-size:20px; font-weight:600; color:#137333">Tax adjustments</h3><p style="margin:0; font-size:14px; color:#1F1F1F; opacity:0.75; line-height:1.55">Depreciation, disallowables, exempt income and losses — cited to legal basis.</p></div>
+        </div>
+        <div class="reveal" style="background:#FEF7E0; border-radius:28px; padding:30px; min-height:210px; display:flex; flex-direction:column; justify-content:space-between">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#B06000">03</div>
+          <div><h3 style="margin:0 0 8px; font-size:20px; font-weight:600; color:#994F00">Prior-year validation</h3><p style="margin:0; font-size:14px; color:#1F1F1F; opacity:0.75; line-height:1.55">Balance-sheet ties and cross-checks against the filed prior return before use.</p></div>
+        </div>
+        <div class="reveal" style="background:#FCE8E6; border-radius:28px; padding:30px; min-height:210px; display:flex; flex-direction:column; justify-content:space-between">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#C5221F">04</div>
+          <div><h3 style="margin:0 0 8px; font-size:20px; font-weight:600; color:#A50E0E">Template tax charge</h3><p style="margin:0; font-size:14px; color:#1F1F1F; opacity:0.75; line-height:1.55">The official CfR workbook computes the charge — the tool only writes confirmed inputs.</p></div>
+        </div>
+        <div class="reveal" style="background:#F1F3F4; border-radius:28px; padding:30px; min-height:210px; display:flex; flex-direction:column; justify-content:space-between">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#5F6368">05</div>
+          <div><h3 style="margin:0 0 8px; font-size:20px; font-weight:600">Reasonableness review</h3><p style="margin:0; font-size:14px; color:#1F1F1F; opacity:0.75; line-height:1.55">Advisory, figure-free prose points for a human to judge — never required to generate.</p></div>
+        </div>
+        <div class="reveal" style="background:#1F1F1F; border-radius:28px; padding:30px; min-height:210px; display:flex; flex-direction:column; justify-content:space-between">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#9AA0A6">06</div>
+          <div><h3 style="margin:0 0 8px; font-size:20px; font-weight:600; color:#FFFFFF">Computation summary</h3><p style="margin:0; font-size:14px; color:rgba(255,255,255,0.7); line-height:1.55">HTML workings: profit, adjustments, mapping provenance and warnings in one place.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRINCIPLES -->
+  <section class="section">
+    <div style="max-width:1240px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:clamp(24px,4vw,56px)">
+      <div class="reveal"><div style="width:34px; height:3px; background:#4285F4; border-radius:2px; margin-bottom:18px"></div><h3 style="margin:0 0 8px; font-size:18px; font-weight:600">Computed, not predicted</h3><p style="margin:0; font-size:14.5px; color:#5F6368; line-height:1.6">Once you confirm mapping and interview, the official CfR template computes every total and the tax charge.</p></div>
+      <div class="reveal"><div style="width:34px; height:3px; background:#34A853; border-radius:2px; margin-bottom:18px"></div><h3 style="margin:0 0 8px; font-size:18px; font-weight:600">The AI never invents a number</h3><p style="margin:0; font-size:14.5px; color:#5F6368; line-height:1.6">The model only proposes mappings and reviews the draft computation. It never writes a value onto the return.</p></div>
+      <div class="reveal"><div style="width:34px; height:3px; background:#FBBC04; border-radius:2px; margin-bottom:18px"></div><h3 style="margin:0 0 8px; font-size:18px; font-weight:600">A preparer confirms everything</h3><p style="margin:0; font-size:14.5px; color:#5F6368; line-height:1.6">Every mapping row, interview answer and the computation itself are reviewed by a person before generation.</p></div>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section id="pricing" class="section">
+    <div style="max-width:1240px; margin:0 auto">
+      <div class="reveal" style="text-align:center; max-width:640px; margin:0 auto 40px">
+        <h2 style="margin:0 0 16px; font-size:clamp(30px,4vw,48px); font-weight:500; letter-spacing:-0.03em; line-height:1.08">Pricing that scales with your filing volume</h2>
+        <p style="margin:0; font-size:17px; color:#5F6368; line-height:1.6; text-wrap:pretty">Start with three returns on the house. Move to a plan when preparation becomes routine.</p>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px,1fr)); gap:22px; align-items:stretch">
+        <div class="reveal" style="display:flex; flex-direction:column; background:#FFFFFF; border:1px solid #E8EAED; border-radius:28px; padding:34px 32px">
+          <div style="font-size:15px; font-weight:600">Single</div>
+          <p style="margin:8px 0 0; font-size:13.5px; color:#5F6368; line-height:1.55; min-height:40px">One-off returns, no commitment.</p>
+          <div style="display:flex; align-items:baseline; gap:6px; margin:24px 0 4px"><span style="font-size:44px; font-weight:500; letter-spacing:-0.03em">€12</span><span style="font-size:15px; color:#5F6368">/ return</span></div>
+          <div style="font-size:13px; color:#80868B; margin-bottom:24px">1 return · standard rate</div>
+          <a href="mailto:info@vacei.com?subject=Malta%20Tax%20AI%20credits" class="btn-light" style="display:inline-flex; justify-content:center; align-items:center; background:#FFFFFF; color:#1F1F1F; border:1px solid #DADCE0; border-radius:999px; padding:13px 24px; font-size:15px; font-weight:500; margin-bottom:26px">Contact to buy</a>
+          <div style="display:flex; flex-direction:column; gap:12px; font-size:14px; color:#3C4043">
+            <div style="display:flex; gap:10px"><span style="color:#34A853; flex:none">✓</span>Full mapping &amp; interview</div>
+            <div style="display:flex; gap:10px"><span style="color:#34A853; flex:none">✓</span>Computation working paper</div>
+            <div style="display:flex; gap:10px"><span style="color:#34A853; flex:none">✓</span>Filled CfR download</div>
+          </div>
+        </div>
+        <div class="reveal" style="position:relative; display:flex; flex-direction:column; background:#050505; border-radius:28px; padding:34px 32px; box-shadow:0 30px 80px -30px rgba(0,0,0,0.5)">
+          <div style="position:absolute; top:26px; right:26px; font-size:11.5px; font-weight:600; color:#050505; background:#FFFFFF; border-radius:999px; padding:4px 12px">Save 17%</div>
+          <div style="font-size:15px; font-weight:600; color:#FFFFFF">Practice</div>
+          <p style="margin:8px 0 0; font-size:13.5px; color:rgba(255,255,255,0.6); line-height:1.55; min-height:40px">For regular preparers. A discounted bundle of ten returns.</p>
+          <div style="display:flex; align-items:baseline; gap:6px; margin:24px 0 4px"><span style="font-size:44px; font-weight:500; letter-spacing:-0.03em; color:#FFFFFF">€10</span><span style="font-size:15px; color:rgba(255,255,255,0.6)">/ return</span></div>
+          <div style="font-size:13px; color:rgba(255,255,255,0.5); margin-bottom:24px">€100 for 10 returns</div>
+          <a href="mailto:info@vacei.com?subject=Malta%20Tax%20AI%20credits" class="btn-white" style="display:inline-flex; justify-content:center; align-items:center; background:#FFFFFF; color:#1F1F1F; border-radius:999px; padding:13px 24px; font-size:15px; font-weight:500; margin-bottom:26px">Contact to buy</a>
+          <div style="display:flex; flex-direction:column; gap:12px; font-size:14px; color:rgba(255,255,255,0.85)">
+            <div style="display:flex; gap:10px"><span style="color:#34A853; flex:none">✓</span>Everything in Single</div>
+            <div style="display:flex; gap:10px"><span style="color:#34A853; flex:none">✓</span>17% volume discount</div>
+            <div style="display:flex; gap:10px"><span style="color:#34A853; flex:none">✓</span>Credits never expire</div>
+          </div>
+        </div>
+        <div class="reveal" style="position:relative; display:flex; flex-direction:column; background:#FFFFFF; border:1px solid #E8EAED; border-radius:28px; padding:34px 32px">
+          <div style="position:absolute; top:26px; right:26px; font-size:11.5px; font-weight:600; color:#1E7E34; background:#E6F4EA; border-radius:999px; padding:4px 12px">Save 29%</div>
+          <div style="font-size:15px; font-weight:600">Firm pack</div>
+          <p style="margin:8px 0 0; font-size:13.5px; color:#5F6368; line-height:1.55; min-height:40px">For busy practices. Best per-return rate before custom volume.</p>
+          <div style="display:flex; align-items:baseline; gap:6px; margin:24px 0 4px"><span style="font-size:44px; font-weight:500; letter-spacing:-0.03em">€8.50</span><span style="font-size:15px; color:#5F6368">/ return</span></div>
+          <div style="font-size:13px; color:#80868B; margin-bottom:24px">€212.50 for 25 returns</div>
+          <a href="mailto:info@vacei.com?subject=Malta%20Tax%20AI%20credits" class="btn-light" style="display:inline-flex; justify-content:center; align-items:center; background:#FFFFFF; color:#1F1F1F; border:1px solid #DADCE0; border-radius:999px; padding:13px 24px; font-size:15px; font-weight:500; margin-bottom:26px">Contact to buy</a>
+          <div style="display:flex; flex-direction:column; gap:12px; font-size:14px; color:#3C4043">
+            <div style="display:flex; gap:10px"><span style="color:#34A853; flex:none">✓</span>Everything in Practice</div>
+            <div style="display:flex; gap:10px"><span style="color:#34A853; flex:none">✓</span>29% volume discount</div>
+            <div style="display:flex; gap:10px"><span style="color:#34A853; flex:none">✓</span>Priority support</div>
+          </div>
+        </div>
+      </div>
+      <div class="reveal" style="display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap; margin-top:22px; background:#F8F9FA; border:1px solid #E8EAED; border-radius:24px; padding:26px 32px">
+        <div style="min-width:0">
+          <div style="font-size:16px; font-weight:600">Need 50+ returns?</div>
+          <p style="margin:5px 0 0; font-size:14px; color:#5F6368; line-height:1.55">Volume pricing and team accounts for firms — we'll build a plan around your numbers.</p>
+        </div>
+        <a href="mailto:info@vacei.com?subject=Volume%20pricing" class="btn-dark" style="flex:none; display:inline-flex; align-items:center; background:#1F1F1F; color:#FFFFFF; border-radius:999px; padding:14px 28px; font-size:15px; font-weight:500">Contact us</a>
+      </div>
+      <p class="reveal" style="text-align:center; font-size:13px; color:#80868B; margin:28px 0 0">Every account starts with three free returns. Prices exclude VAT.</p>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section id="start" class="section" style="padding-left:clamp(16px,4vw,44px); padding-right:clamp(16px,4vw,44px)">
+    <div class="reveal" style="max-width:1240px; margin:0 auto; background:#050505; border-radius:40px; padding:clamp(56px,8vw,110px) clamp(24px,6vw,80px); text-align:center">
+      <h2 style="margin:0 0 16px; font-size:clamp(32px,4.6vw,56px); font-weight:500; letter-spacing:-0.03em; color:#FFFFFF">Prepare your next return.</h2>
+      <p style="margin:0 auto 34px; font-size:17px; color:rgba(255,255,255,0.65); max-width:480px; line-height:1.55">Three returns free — upload an ETB and walk through mapping, interview and generation.</p>
+      <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap">
+        <a href="/signup" class="btn-white" style="display:inline-flex; align-items:center; background:#FFFFFF; color:#1F1F1F; border-radius:999px; padding:15px 30px; font-size:16px; font-weight:500">Get 3 free returns</a>
+        <a href="mailto:info@vacei.com?subject=Demo%20request" style="display:inline-flex; align-items:center; background:transparent; color:#FFFFFF; border:1px solid rgba(255,255,255,0.35); border-radius:999px; padding:15px 30px; font-size:16px; font-weight:500">Book a demo</a>
+      </div>
+    </div>
+  </section>
+
+  <p style="max-width:1240px; margin:0 auto; padding:0 clamp(20px,4vw,44px); font-size:12.5px; line-height:1.6; color:#9AA0A6; text-align:center">Malta Tax AI is a preparer-side preparation tool. It does not replace professional judgement or express a tax opinion. A licensed preparer reviews every output before filing.</p>
+
+  <footer style="padding:22px clamp(20px,4vw,44px) 44px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; max-width:1300px; margin:0 auto">
+    <div style="display:flex; align-items:center; gap:10px">
+      <img src="/assets/vacei-logo.png" alt="VACEI" style="width:18px; height:21px; object-fit:contain">
+      <span style="font-size:13px; color:#5F6368">Malta Tax AI — a VACEI product</span>
+    </div>
+    <div style="display:flex; gap:22px; font-size:13px">
+      <a href="/terms" style="color:#5F6368">Terms &amp; Privacy</a>
+      <a href="mailto:info@vacei.com" style="color:#5F6368">info@vacei.com</a>
+      <a href="/" style="color:#5F6368">Original homepage</a>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  var phrases = ['mapped in minutes.', 'computed by the template.', 'ready to file.'];
+  var typedEl = document.getElementById('typed');
+  var pi = 0, ci = 0, deleting = false, t;
+  function tick() {
+    if (!typedEl) return;
+    var full = phrases[pi];
+    if (!deleting) {
+      ci++;
+      typedEl.textContent = full.slice(0, ci);
+      if (ci === full.length) { deleting = true; t = setTimeout(tick, 2100); return; }
+      t = setTimeout(tick, 55 + Math.random() * 45);
+    } else {
+      ci--;
+      typedEl.textContent = full.slice(0, ci);
+      if (ci === 0) { deleting = false; pi = (pi + 1) % phrases.length; t = setTimeout(tick, 350); return; }
+      t = setTimeout(tick, 28);
+    }
+  }
+  tick();
+
+  var nav = document.getElementById('nav');
+  var bw = document.getElementById('brandWord');
+  function onScroll() {
+    var y = window.scrollY || 0;
+    if (nav) {
+      nav.style.background = y > 40 ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0)';
+      nav.style.boxShadow = y > 40 ? '0 1px 0 rgba(0,0,0,0.07)' : 'none';
+      nav.style.backdropFilter = y > 40 ? 'blur(14px)' : 'none';
+    }
+    if (bw) {
+      var collapsed = y > 120;
+      bw.style.maxWidth = collapsed ? '0px' : '240px';
+      bw.style.opacity = collapsed ? '0' : '1';
+      bw.style.paddingLeft = collapsed ? '0px' : '11px';
+      bw.style.transform = collapsed ? 'translateX(-8px)' : 'translateX(0)';
+    }
+  }
+  window.addEventListener('scroll', function () { requestAnimationFrame(onScroll); }, { passive: true });
+  onScroll();
+
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.15 });
+  document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
+})();
+</script>
+</body>
+</html>

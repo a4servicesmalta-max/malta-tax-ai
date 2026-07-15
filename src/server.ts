@@ -273,7 +273,7 @@ export function createApp() {
 
   const PUBLIC_PAGES = new Set([
     '/', '/index.html', '/login', '/login.html', '/signup', '/signup.html', '/reset', '/reset.html', '/verify',
-    '/terms', '/terms.html',
+    '/terms', '/terms.html', '/new-page', '/new-page.html',
   ]);
   const PUBLIC_API = new Set(['/api/register', '/api/login', '/api/logout', '/api/reset-request', '/api/reset']);
 
